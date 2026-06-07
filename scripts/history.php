@@ -61,7 +61,7 @@ if(isset($_GET['blocation']) ) {
 
 	$output = fopen("php://output", "w");
     foreach ($list as $row) {
-        fputcsv($output, $row);
+        fputcsv($output, $row, ',', '"', '');
     }
     fclose($output);
 

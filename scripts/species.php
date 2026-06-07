@@ -317,7 +317,7 @@ if (isset($_GET['export']) && $_GET['export'] == 'csv') {
     header('Content-Type: text/csv');
     header('Content-Disposition: attachment; filename="species_list.csv"');
     $output = fopen('php://output', 'w');
-    fputcsv($output, ['Common Name', 'Scientific Name', 'Detections', 'Max Confidence', 'First Detected']);
+    fputcsv($output, ['Common Name', 'Scientific Name', 'Detections', 'Max Confidence', 'First Detected'], ',', '"', '');
     foreach ($species_list as $bird) {
         fputcsv($output, [
             $bird['Com_Name'],
@@ -325,7 +325,7 @@ if (isset($_GET['export']) && $_GET['export'] == 'csv') {
             $bird['Count'],
             round($bird['MaxConf'] * 100, 1) . '%',
             $bird['FirstDate']
-        ]);
+        ], ',', '"', '');
     }
     fclose($output);
     exit();
