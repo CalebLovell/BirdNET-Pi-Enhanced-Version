@@ -23,8 +23,154 @@ $one_month_ago = date('Y-m-d', strtotime('-30 days'));
 $two_weeks_ago = date('Y-m-d', strtotime('-14 days'));
 $four_weeks_ago = date('Y-m-d', strtotime('-28 days'));
 $today = date('Y-m-d');
-$seasonal_species_limit = request_int($_GET, 'seasonal_limit', 60, 10, 250);
+$seasonal_batch_size = 50;
+$seasonal_species_limit = $seasonal_batch_size;
+$seasonal_species_offset = request_int($_GET, 'seasonal_offset', 0, 0, 1000000);
+$seasonal_total_species = 0;
 $migration_list_limit = request_int($_GET, 'list_limit', 100, 10, 500);
+
+function get_seasonal_species_total($db) {
+    return $db->querySingle('SELECT COUNT(DISTINCT Sci_Name) FROM detections') ?: 0;
+}
+
+function get_seasonal_presence_batch($db, $limit, $offset) {
+    $seasonal_top = [];
+    $seasonal_base = [];
+    $seasonal_scis = [];
+
+    $top_species_stmt = $db->prepare("
+        SELECT Com_Name, Sci_Name, COUNT(*) AS total
+        FROM detections
+        GROUP BY Sci_Name
+        ORDER BY total DESC, Com_Name ASC, Sci_Name ASC
+        LIMIT :limit OFFSET :offset
+    ");
+    ensure_db_ok($top_species_stmt);
+    $top_species_stmt->bindValue(':limit', $limit, SQLITE3_INTEGER);
+    $top_species_stmt->bindValue(':offset', $offset, SQLITE3_INTEGER);
+    $top_species_res = $top_species_stmt->execute();
+    while($row = $top_species_res->fetchArray(SQLITE3_ASSOC)) {
+        $row['actual_segments'] = array_fill(0, 48, 0);
+        $seasonal_base[$row['Sci_Name']] = $row;
+        $seasonal_scis[] = $row['Sci_Name'];
+    }
+
+    if (!empty($seasonal_scis)) {
+        $escaped_scis = array_map(function($s) use ($db) { return "'" . $db->escapeString($s) . "'"; }, $seasonal_scis);
+        $segments_sql = "
+            SELECT Sci_Name,
+                   ((CAST(strftime('%m', Date) AS INTEGER) - 1) * 4) +
+                   CASE
+                       WHEN CAST(strftime('%d', Date) AS INTEGER) <= 7 THEN 1
+                       WHEN CAST(strftime('%d', Date) AS INTEGER) <= 14 THEN 2
+                       WHEN CAST(strftime('%d', Date) AS INTEGER) <= 21 THEN 3
+                       ELSE 4
+                   END AS segment,
+                   COUNT(*) AS cnt
+            FROM detections
+            WHERE Sci_Name IN (" . implode(',', $escaped_scis) . ")
+            GROUP BY Sci_Name, segment
+        ";
+        $segments_res = $db->query($segments_sql);
+        while($row = $segments_res->fetchArray(SQLITE3_ASSOC)) {
+            $idx = intval($row['segment']) - 1;
+            if (isset($seasonal_base[$row['Sci_Name']]) && $idx >= 0 && $idx < 48) {
+                $seasonal_base[$row['Sci_Name']]['actual_segments'][$idx] = intval($row['cnt']);
+            }
+        }
+    }
+
+    $expected_freqs = [];
+    if (!empty($seasonal_scis)) {
+        $sci_str = implode(',', $seasonal_scis);
+        $cmd = get_home() . "/BirdNET-Pi/birdnet/bin/python3 " . __ROOT__ . "/scripts/get_seasonal_expected.py " . escapeshellarg($sci_str);
+        $output = shell_exec($cmd);
+        $expected_freqs = json_decode($output, true) ?: [];
+    }
+
+    foreach($seasonal_base as $row) {
+        $active_segments = count(array_filter($row['actual_segments'], function($val) { return $val > 0; }));
+        $row['segments_active'] = $active_segments;
+        $row['status'] = $active_segments >= 36 ? 'Year-round' : ($active_segments >= 12 ? 'Seasonal' : 'Transient');
+        $row['expected_segments'] = isset($expected_freqs[$row['Sci_Name']]) ? $expected_freqs[$row['Sci_Name']] : array_fill(0, 48, 0.0);
+        $seasonal_top[] = $row;
+    }
+
+    return $seasonal_top;
+}
+
+function render_seasonal_species_item($s) {
+    $status_colors = ['Year-round' => '#10b981', 'Seasonal' => '#f59e0b', 'Transient' => '#ef4444'];
+    $status_color = isset($status_colors[$s['status']]) ? $status_colors[$s['status']] : '#64748b';
+    $months_names = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+    $month_initials = ['J','F','M','A','M','J','J','A','S','O','N','D'];
+    $expected_segments = isset($s['expected_segments']) && is_array($s['expected_segments']) ? $s['expected_segments'] : array_fill(0, 48, 0.0);
+    $actual_segments = isset($s['actual_segments']) && is_array($s['actual_segments']) ? $s['actual_segments'] : array_fill(0, 48, 0);
+?>
+            <div class="insights-stats-item" style="flex-wrap: wrap; gap: 12px; padding: 16px 20px;">
+                <div style="flex: 1 1 220px;">
+                    <div class="insights-stats-name" style="margin-bottom: 4px; font-size: 1.05em;"><?php echo h($s['Com_Name']); ?></div>
+                    <div style="font-size: 0.85em; color: var(--text-muted);">
+                        <span style="display: inline-block; padding: 2px 8px; background: var(--bg-card); border-radius: 10px; border: 1px solid var(--border-light); margin-right: 8px;"><?php echo number_format($s['total']); ?> detections</span>
+                        <span style="color: <?php echo h($status_color); ?>; font-weight: 700;"><?php echo h($s['status']); ?></span>
+                    </div>
+                </div>
+                <div style="display: flex; flex-direction: column; flex: 1 1 320px; min-width: 280px;">
+                    <div class="seasonal-bars-container">
+                        <?php for ($i = 0; $i < 48; $i++): ?>
+                            <?php if ($i > 0 && $i % 4 == 0): ?>
+                                <div class="seasonal-month-divider"></div>
+                            <?php endif; ?>
+                            <?php
+                                $expected = isset($expected_segments[$i]) ? floatval($expected_segments[$i]) : 0.0;
+                                $actual = isset($actual_segments[$i]) ? intval($actual_segments[$i]) : 0;
+                                $month_idx = floor($i / 4);
+                                $week_in_month = ($i % 4) + 1;
+                                $tooltip = $months_names[$month_idx] . " (Seg $week_in_month): " . ($actual > 0 ? $actual . " detections" : "Expected frequency: " . round($expected * 100, 1) . "%");
+                            ?>
+                            <div class="seasonal-bar-wrap" title="<?php echo h($tooltip); ?>">
+                                <div class="seasonal-bar-expected" style="height: <?php echo max(5, $expected * 30); ?>%;"></div>
+                                <div class="seasonal-bar-actual <?php echo $actual > 0 ? 'detected' : ''; ?>" style="height: <?php echo max(5, $expected * 30); ?>%;"></div>
+                            </div>
+                        <?php endfor; ?>
+                    </div>
+                    <div class="seasonal-month-labels">
+                        <?php foreach($month_initials as $idx => $mi): ?>
+                            <?php if ($idx > 0): ?>
+                                <div class="seasonal-label-spacer"></div>
+                            <?php endif; ?>
+                            <div class="seasonal-month-label"><?php echo $mi; ?></div>
+                        <?php endforeach; ?>
+                    </div>
+                </div>
+            </div>
+<?php
+}
+
+function render_seasonal_species_items($species_rows) {
+    ob_start();
+    foreach($species_rows as $s) {
+        render_seasonal_species_item($s);
+    }
+    return ob_get_clean();
+}
+
+if ($subview == 'migration' && isset($_GET['seasonal_batch'])) {
+    $seasonal_batch = get_seasonal_presence_batch($db, $seasonal_species_limit, $seasonal_species_offset);
+    $seasonal_total_species = get_seasonal_species_total($db);
+    $loaded_count = count($seasonal_batch);
+    $next_offset = $seasonal_species_offset + $loaded_count;
+
+    header('Content-Type: application/json');
+    echo json_encode([
+        'html' => render_seasonal_species_items($seasonal_batch),
+        'count' => $loaded_count,
+        'next_offset' => $next_offset,
+        'total' => $seasonal_total_species,
+        'has_more' => $loaded_count > 0 && $next_offset < $seasonal_total_species
+    ]);
+    exit;
+}
 
 if ($subview == 'dashboard') {
     $lifetime_species = $db->querySingle('SELECT COUNT(DISTINCT(Sci_Name)) FROM detections') ?: 0;
@@ -175,67 +321,8 @@ if ($subview == 'migration') {
     $yoy_res = $yoy_stmt->execute();
     while($row = $yoy_res->fetchArray(SQLITE3_ASSOC)) { $yoy_comparison[] = $row; }
 
-    $seasonal_base = [];
-    $seasonal_scis = [];
-    $top_species_stmt = $db->prepare("
-        SELECT Com_Name, Sci_Name, COUNT(*) AS total
-        FROM detections
-        GROUP BY Sci_Name
-        ORDER BY total DESC
-        LIMIT :limit
-    ");
-    ensure_db_ok($top_species_stmt);
-    $top_species_stmt->bindValue(':limit', $seasonal_species_limit, SQLITE3_INTEGER);
-    $top_species_res = $top_species_stmt->execute();
-    while($row = $top_species_res->fetchArray(SQLITE3_ASSOC)) {
-        $row['actual_segments'] = array_fill(0, 48, 0);
-        $seasonal_base[$row['Sci_Name']] = $row;
-        $seasonal_scis[] = $row['Sci_Name'];
-    }
-
-    if (!empty($seasonal_scis)) {
-        $escaped_scis = array_map(function($s) use ($db) { return "'" . $db->escapeString($s) . "'"; }, $seasonal_scis);
-        $segments_sql = "
-            SELECT Sci_Name,
-                   ((CAST(strftime('%m', Date) AS INTEGER) - 1) * 4) +
-                   CASE
-                       WHEN CAST(strftime('%d', Date) AS INTEGER) <= 7 THEN 1
-                       WHEN CAST(strftime('%d', Date) AS INTEGER) <= 14 THEN 2
-                       WHEN CAST(strftime('%d', Date) AS INTEGER) <= 21 THEN 3
-                       ELSE 4
-                   END AS segment,
-                   COUNT(*) AS cnt
-            FROM detections
-            WHERE Sci_Name IN (" . implode(',', $escaped_scis) . ")
-            GROUP BY Sci_Name, segment
-        ";
-        $segments_res = $db->query($segments_sql);
-        while($row = $segments_res->fetchArray(SQLITE3_ASSOC)) {
-            $idx = intval($row['segment']) - 1;
-            if (isset($seasonal_base[$row['Sci_Name']]) && $idx >= 0 && $idx < 48) {
-                $seasonal_base[$row['Sci_Name']]['actual_segments'][$idx] = intval($row['cnt']);
-            }
-        }
-    }
-
-    // Fetch expected frequencies from Python helper
-    $expected_freqs = [];
-    if (!empty($seasonal_scis)) {
-        $sci_str = implode(',', $seasonal_scis);
-        // Use the absolute path to the virtualenv python to ensuring it runs correctly from the web user
-        $cmd = get_home() . "/BirdNET-Pi/birdnet/bin/python3 " . __ROOT__ . "/scripts/get_seasonal_expected.py " . escapeshellarg($sci_str);
-        $output = shell_exec($cmd);
-        $expected_freqs = json_decode($output, true) ?: [];
-    }
-
-    foreach($seasonal_base as $row) {
-        $active_segments = count(array_filter($row['actual_segments'], function($val) { return $val > 0; }));
-        $row['segments_active'] = $active_segments;
-        // status based on portion of year present
-        $row['status'] = $active_segments >= 36 ? 'Year-round' : ($active_segments >= 12 ? 'Seasonal' : 'Transient');
-        $row['expected_segments'] = isset($expected_freqs[$row['Sci_Name']]) ? $expected_freqs[$row['Sci_Name']] : array_fill(0, 48, 0.0);
-        $seasonal_top[] = $row;
-    }
+    $seasonal_total_species = get_seasonal_species_total($db);
+    $seasonal_top = get_seasonal_presence_batch($db, $seasonal_species_limit, 0);
     $monthly_res = $db->query("SELECT * FROM (SELECT strftime('%Y-%m', Date) as month, COUNT(DISTINCT Sci_Name) as diversity, COUNT(*) as detections FROM detections GROUP BY month ORDER BY month DESC LIMIT 24) ORDER BY month ASC");
     while($row = $monthly_res->fetchArray(SQLITE3_ASSOC)) { $monthly_stats[] = $row; }
     $month_labels = json_encode(array_map(function($r) { return $r['month']; }, $monthly_stats));
@@ -726,6 +813,7 @@ $db->close();
         letter-spacing: 0.5px;
     }
     .show-list-btn:hover { background: var(--accent-subtle); color: var(--accent); }
+    .show-list-btn:disabled { cursor: wait; opacity: 0.65; }
 </style>
 
 <div class="insights-container">
@@ -1084,73 +1172,26 @@ $db->close();
 
     <!-- Seasonal Presence -->
     <section class="insights-section" style="margin-top: 30px;">
-        <div class="insights-section-title">🗓️ Seasonal Presence <span class="info-btn">ⓘ<span class="info-tooltip" style="width: 340px;"><strong>Classification Guide:</strong><br>• <strong>Year-round:</strong> Detected across 9+ months<br>• <strong>Seasonal:</strong> Detected across 3-8 months<br>• <strong>Transient:</strong> Detected &lt;3 months<br><br><strong>Data Accuracy Disclaimer:</strong><br>These classifications may be inaccurate if the station has been running for less than a full year, as it lacks seasonal historical context.<br><br>Bar <strong>height</strong> is expected frequency. <strong>Purple highlights</strong> are actual detections.</span></span><?php if(count($seasonal_top) >= $seasonal_species_limit): ?> <span style="font-size: 0.85em; font-weight: 500; color: var(--text-muted);">(Showing the top <?php echo number_format($seasonal_species_limit); ?> detected species by lifetime detections to keep this page responsive.)</span><?php endif; ?></div>
-        <div class="insights-stats-list">
+        <?php $seasonal_loaded_count = count($seasonal_top); ?>
+        <div class="insights-section-title">🗓️ Seasonal Presence <span class="info-btn">ⓘ<span class="info-tooltip" style="width: 340px;"><strong>Classification Guide:</strong><br>• <strong>Year-round:</strong> Detected across 9+ months<br>• <strong>Seasonal:</strong> Detected across 3-8 months<br>• <strong>Transient:</strong> Detected &lt;3 months<br><br><strong>Data Accuracy Disclaimer:</strong><br>These classifications may be inaccurate if the station has been running for less than a full year, as it lacks seasonal historical context.<br><br>Bar <strong>height</strong> is expected frequency. <strong>Purple highlights</strong> are actual detections.</span></span><?php if($seasonal_total_species > 0): ?> <span id="seasonal-limit-note" style="font-size: 0.85em; font-weight: 500; color: var(--text-muted);">(Showing <span id="seasonal-shown-count"><?php echo number_format($seasonal_loaded_count); ?></span> of <span id="seasonal-total-count"><?php echo number_format($seasonal_total_species); ?></span> lifetime species<?php if($seasonal_total_species > $seasonal_loaded_count): ?>. Load <?php echo number_format($seasonal_batch_size); ?> more at a time<?php endif; ?>.)</span><?php endif; ?></div>
+        <div class="insights-stats-list" id="seasonal-presence-list">
             <?php if(empty($seasonal_top)): ?>
             <div class="insights-stats-item">
                 <span class="insights-stats-name">Not enough data yet</span>
                 <span class="insights-stats-count">—</span>
             </div>
             <?php else: ?>
-            <?php
-                $status_colors = ['Year-round' => '#10b981', 'Seasonal' => '#f59e0b', 'Transient' => '#ef4444'];
-            ?>
-            <?php $rank_s = 1; foreach($seasonal_top as $s): ?>
-            <div class="insights-stats-item <?php echo $rank_s > 10 ? 'hidden-item' : ''; ?>" style="flex-wrap: wrap; gap: 12px; padding: 16px 20px;">
-                <div style="flex: 1 1 220px;">
-                    <div class="insights-stats-name" style="margin-bottom: 4px; font-size: 1.05em;"><?php echo h($s['Com_Name']); ?></div>
-                    <div style="font-size: 0.85em; color: var(--text-muted);">
-                        <span style="display: inline-block; padding: 2px 8px; background: var(--bg-card); border-radius: 10px; border: 1px solid var(--border-light); margin-right: 8px;"><?php echo number_format($s['total']); ?> detections</span>
-                        <span style="color: <?php echo h($status_colors[$s['status']]); ?>; font-weight: 700;"><?php echo h($s['status']); ?></span>
-                    </div>
-                </div>
-                <div style="display: flex; flex-direction: column; flex: 1 1 320px; min-width: 280px;">
-                    <div class="seasonal-bars-container">
-                        <?php 
-                            $months_names = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
-                            for ($i = 0; $i < 48; $i++): 
-                        ?>
-                            <?php if ($i > 0 && $i % 4 == 0): ?>
-                                <div class="seasonal-month-divider"></div>
-                            <?php endif; ?>
-                            
-                            <?php 
-                                $expected = $s['expected_segments'][$i];
-                                $actual = $s['actual_segments'][$i];
-                                $month_idx = floor($i / 4);
-                                $week_in_month = ($i % 4) + 1;
-                                $tooltip = $months_names[$month_idx] . " (Seg $week_in_month): " . ($actual > 0 ? $actual . " detections" : "Expected frequency: " . round($expected * 100, 1) . "%");
-                            ?>
-                            <div class="seasonal-bar-wrap" title="<?php echo h($tooltip); ?>">
-                                <div class="seasonal-bar-expected" style="height: <?php echo max(5, $expected * 30); ?>%;"></div>
-                                <div class="seasonal-bar-actual <?php echo $actual > 0 ? 'detected' : ''; ?>" style="height: <?php echo max(5, $expected * 30); ?>%;"></div>
-                            </div>
-                        <?php endfor; ?>
-                    </div>
-                    <!-- Month Labels -->
-                    <div class="seasonal-month-labels">
-                        <?php 
-                            $month_initials = ['J','F','M','A','M','J','J','A','S','O','N','D'];
-                            foreach($month_initials as $idx => $mi):
-                        ?>
-                            <?php if ($idx > 0): ?>
-                                <div class="seasonal-label-spacer"></div>
-                            <?php endif; ?>
-                            <div class="seasonal-month-label"><?php echo $mi; ?></div>
-                        <?php endforeach; ?>
-                    </div>
-                </div>
-            </div>
-            <?php $rank_s++; endforeach; ?>
+            <?php echo render_seasonal_species_items($seasonal_top); ?>
             <?php endif; ?>
         </div>
-        <?php if(count($seasonal_top) > 10): ?>
-        <button class="show-list-btn" 
-                onclick="toggleItems(this)" 
-                data-expanded="false" 
-                data-show-text="Show all <?php echo count($seasonal_top); ?> detected species ↓" 
-                data-hide-text="Show top 10 species ↑">
-            Show all <?php echo count($seasonal_top); ?> detected species ↓
+        <?php if($seasonal_total_species > $seasonal_loaded_count): ?>
+        <button class="show-list-btn"
+                id="seasonal-load-more"
+                onclick="loadSeasonalBatch(this)"
+                data-offset="<?php echo $seasonal_loaded_count; ?>"
+                data-limit="<?php echo $seasonal_batch_size; ?>"
+                data-total="<?php echo $seasonal_total_species; ?>">
+            Load <?php echo number_format(min($seasonal_batch_size, $seasonal_total_species - $seasonal_loaded_count)); ?> more species ↓
         </button>
         <?php endif; ?>
     </section>
@@ -1555,6 +1596,63 @@ document.addEventListener('DOMContentLoaded', function() {
             hiddenItems.forEach(el => el.classList.remove('hidden-item'));
             btn.innerHTML = btn.getAttribute('data-hide-text');
             btn.setAttribute('data-expanded', 'true');
+        }
+    };
+
+    window.loadSeasonalBatch = async function(btn) {
+        const list = document.getElementById('seasonal-presence-list');
+        const shownCount = document.getElementById('seasonal-shown-count');
+        const totalCount = document.getElementById('seasonal-total-count');
+        const note = document.getElementById('seasonal-limit-note');
+        const limit = parseInt(btn.getAttribute('data-limit') || '50', 10);
+        const offset = parseInt(btn.getAttribute('data-offset') || '0', 10);
+        const previousText = btn.textContent;
+
+        if (!list || btn.disabled) return;
+
+        btn.disabled = true;
+        btn.textContent = 'Loading species...';
+
+        try {
+            const batchUrl = new URL('insights.php', window.location.href);
+            batchUrl.searchParams.set('subview', 'migration');
+            batchUrl.searchParams.set('seasonal_batch', '1');
+            batchUrl.searchParams.set('seasonal_offset', String(offset));
+
+            const response = await fetch(batchUrl.toString(), {
+                headers: { 'X-Requested-With': 'XMLHttpRequest' }
+            });
+
+            if (!response.ok) {
+                throw new Error('Seasonal batch request failed');
+            }
+
+            const data = await response.json();
+            if (data.html) {
+                list.insertAdjacentHTML('beforeend', data.html);
+            }
+
+            const nextOffset = Number(data.next_offset || offset);
+            const total = Number(data.total || btn.getAttribute('data-total') || 0);
+            const remaining = Math.max(0, total - nextOffset);
+
+            btn.setAttribute('data-offset', String(nextOffset));
+            btn.setAttribute('data-total', String(total));
+            if (shownCount) shownCount.textContent = nextOffset.toLocaleString();
+            if (totalCount) totalCount.textContent = total.toLocaleString();
+
+            if (!data.has_more || remaining === 0) {
+                if (note) note.textContent = '(Showing all ' + total.toLocaleString() + ' lifetime species.)';
+                btn.remove();
+            } else {
+                btn.disabled = false;
+                btn.textContent = 'Load ' + Math.min(limit, remaining).toLocaleString() + ' more species ↓';
+            }
+        } catch (err) {
+            console.error(err);
+            btn.disabled = false;
+            btn.textContent = previousText;
+            alert('Could not load more species. Please try again.');
         }
     };
 
