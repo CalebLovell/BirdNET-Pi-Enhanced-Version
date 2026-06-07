@@ -1173,7 +1173,7 @@ $db->close();
     <!-- Seasonal Presence -->
     <section class="insights-section" style="margin-top: 30px;">
         <?php $seasonal_loaded_count = count($seasonal_top); ?>
-        <div class="insights-section-title">🗓️ Seasonal Presence <span class="info-btn">ⓘ<span class="info-tooltip" style="width: 340px;"><strong>Classification Guide:</strong><br>• <strong>Year-round:</strong> Detected across 9+ months<br>• <strong>Seasonal:</strong> Detected across 3-8 months<br>• <strong>Transient:</strong> Detected &lt;3 months<br><br><strong>Data Accuracy Disclaimer:</strong><br>These classifications may be inaccurate if the station has been running for less than a full year, as it lacks seasonal historical context.<br><br>Bar <strong>height</strong> is expected frequency. <strong>Purple highlights</strong> are actual detections.</span></span><?php if($seasonal_total_species > 0): ?> <span id="seasonal-limit-note" style="font-size: 0.85em; font-weight: 500; color: var(--text-muted);">(Showing <span id="seasonal-shown-count"><?php echo number_format($seasonal_loaded_count); ?></span> of <span id="seasonal-total-count"><?php echo number_format($seasonal_total_species); ?></span> lifetime species<?php if($seasonal_total_species > $seasonal_loaded_count): ?>. Load <?php echo number_format($seasonal_batch_size); ?> more at a time<?php endif; ?>.)</span><?php endif; ?></div>
+        <div class="insights-section-title">🗓️ Seasonal Presence <span class="info-btn">ⓘ<span class="info-tooltip" style="width: 340px;"><strong>Classification Guide:</strong><br>• <strong>Year-round:</strong> Detected across 9+ months<br>• <strong>Seasonal:</strong> Detected across 3-8 months<br>• <strong>Transient:</strong> Detected &lt;3 months<br><br><strong>Data Accuracy Disclaimer:</strong><br>These classifications may be inaccurate if the station has been running for less than a full year, as it lacks seasonal historical context.<br><br>Bar <strong>height</strong> is expected frequency. <strong>Purple highlights</strong> are actual detections.</span></span></div>
         <div class="insights-stats-list" id="seasonal-presence-list">
             <?php if(empty($seasonal_top)): ?>
             <div class="insights-stats-item">
@@ -1601,9 +1601,6 @@ document.addEventListener('DOMContentLoaded', function() {
 
     window.loadSeasonalBatch = async function(btn) {
         const list = document.getElementById('seasonal-presence-list');
-        const shownCount = document.getElementById('seasonal-shown-count');
-        const totalCount = document.getElementById('seasonal-total-count');
-        const note = document.getElementById('seasonal-limit-note');
         const limit = parseInt(btn.getAttribute('data-limit') || '50', 10);
         const offset = parseInt(btn.getAttribute('data-offset') || '0', 10);
         const previousText = btn.textContent;
@@ -1638,11 +1635,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
             btn.setAttribute('data-offset', String(nextOffset));
             btn.setAttribute('data-total', String(total));
-            if (shownCount) shownCount.textContent = nextOffset.toLocaleString();
-            if (totalCount) totalCount.textContent = total.toLocaleString();
-
             if (!data.has_more || remaining === 0) {
-                if (note) note.textContent = '(Showing all ' + total.toLocaleString() + ' lifetime species.)';
                 btn.remove();
             } else {
                 btn.disabled = false;
