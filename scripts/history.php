@@ -27,41 +27,81 @@ $statement1->bindValue(':date', $theDate, SQLITE3_TEXT);
 $result1 = $statement1->execute();
 $totalcount = $result1->fetchArray(SQLITE3_ASSOC);
 
+function get_ebird_export_rows($db, $date, $min_confidence = 0.75) {
+	$rows = [];
+	$statement = $db->prepare("
+		SELECT Com_Name,
+			   CAST(substr(Time, 1, 2) AS INTEGER) AS Hour,
+			   COUNT(*) AS DetectionCount
+		FROM detections
+		WHERE Date == :date
+		  AND Confidence > :min_confidence
+		  AND Time IS NOT NULL
+		  AND length(Time) >= 2
+		GROUP BY Com_Name, CAST(substr(Time, 1, 2) AS INTEGER)
+		ORDER BY Hour ASC, DetectionCount DESC, Com_Name ASC
+	");
+	ensure_db_ok($statement);
+	$statement->bindValue(':date', $date, SQLITE3_TEXT);
+	$statement->bindValue(':min_confidence', $min_confidence, SQLITE3_FLOAT);
+	$result = $statement->execute();
+	while($row = $result->fetchArray(SQLITE3_ASSOC)) {
+		$rows[] = $row;
+	}
+	return $rows;
+}
+
+function ebird_export_param($key, $default = '') {
+	return html_entity_decode($_GET[$key] ?? $default, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
+}
+
+if(isset($_GET['ebird_export_check'])) {
+	header('Content-Type: application/json');
+	$export_rows = get_ebird_export_rows($db, $theDate);
+	echo json_encode([
+		'count' => count($export_rows),
+		'date' => $theDate
+	]);
+	die();
+}
+
 if(isset($_GET['blocation']) ) {
 
-	header("Content-type: text/csv");
+	ini_set('display_errors', 0);
+	ini_set('display_startup_errors', 0);
+	$export_rows = get_ebird_export_rows($db, $theDate);
+
+	if (empty($export_rows)) {
+		header('Content-Type: text/plain; charset=UTF-8');
+		echo "No detections above 75% confidence were found for $theDate. Nothing was exported.";
+		die();
+	}
+
+	while (ob_get_level() > 0) {
+		ob_end_clean();
+	}
+
+	header("Content-Type: text/csv");
 	header("Content-Disposition: attachment; filename=result_file.csv");
 	header("Pragma: no-cache");
 	header("Expires: 0");
 
-	$list = array ();
-
-	//$hrsinday = intval(($sunset-$sunrise)/60/60);
-	$hrsinday = 24;
-	for($i=0;$i<$hrsinday;$i++) {
-		$starttime = strtotime("12 AM") + (3600*$i);
-
-		$statement1 = $db->prepare("SELECT DISTINCT(Com_Name), COUNT(*) FROM detections WHERE Date == :date AND Time > :start_time AND Time < :end_time AND Confidence > 0.75 GROUP By Com_Name ORDER BY COUNT(*) DESC");
-		ensure_db_ok($statement1);
-		$statement1->bindValue(':date', $theDate, SQLITE3_TEXT);
-		$statement1->bindValue(':start_time', date("H:i", $starttime), SQLITE3_TEXT);
-		$statement1->bindValue(':end_time', date("H:i", $starttime + 3600), SQLITE3_TEXT);
-		$result1 = $statement1->execute();
-
-		$detections = [];
-		while($detection=$result1->fetchArray(SQLITE3_ASSOC))
-		{
-			$detections[$detection["Com_Name"]] = $detection["COUNT(*)"];
-		}
-		foreach($detections as $com_name=>$scount)
-		{
-			array_push($list, array($com_name,'','','1','',$_GET['blocation'],$config["LATITUDE"],$config["LONGITUDE"],date("m/d/Y", strtotime($theDate)), date("H:i", $starttime), $_GET['state'], $_GET['country'], $_GET['protocol'], $_GET['num_observers'], '60', 'Y', $_GET['dist_traveled'],'',$_GET['notes'] ) );
-		}
-	}
+	$location = ebird_export_param('blocation');
+	$state = strtoupper(ebird_export_param('state'));
+	$country = strtoupper(ebird_export_param('country'));
+	$protocol = ebird_export_param('protocol');
+	$num_observers = ebird_export_param('num_observers');
+	$dist_traveled = ebird_export_param('dist_traveled');
+	$notes = ebird_export_param('notes');
+	$latitude = $config["LATITUDE"] ?? '';
+	$longitude = $config["LONGITUDE"] ?? '';
+	$observation_date = date("m/d/Y", strtotime($theDate));
 
 	$output = fopen("php://output", "w");
-    foreach ($list as $row) {
-        fputcsv($output, $row, ',', '"', '');
+    foreach ($export_rows as $row) {
+		$start_time = sprintf('%02d:00', intval($row['Hour']));
+		$csv_row = array($row['Com_Name'],'','','1','',$location,$latitude,$longitude,$observation_date,$start_time,$state,$country,$protocol,$num_observers,'60','Y',$dist_traveled,'',$notes);
+        fputcsv($output, $csv_row, ',', '"', '');
     }
     fclose($output);
 
@@ -341,7 +381,7 @@ function closeDialog() {
   document.getElementById('attribution-dialog').close();
 }
 
-function submitID() {
+async function submitID() {
   var blocation = document.getElementById("blocation").value.trim();
   var state = document.getElementById("state").value.trim();
   var country = document.getElementById("country").value.trim();
@@ -366,7 +406,36 @@ function submitID() {
       return;
   }
 
-  window.open("history.php?blocation="+blocation+"&state="+state+"&country="+country+"&protocol="+protocol+"&num_observers="+num_observers+"&dist_traveled="+dist_traveled+"&notes="+notes+"&date="+export_date);
+  var checkParams = new URLSearchParams({
+      ebird_export_check: "1",
+      date: export_date
+  });
+
+  try {
+      var checkResponse = await fetch("history.php?" + checkParams.toString(), {
+          headers: { "Accept": "application/json" }
+      });
+      var checkData = await checkResponse.json();
+      if (!checkData.count) {
+          alert("No detections above 75% confidence were found for " + export_date + ". Nothing was exported.");
+          return;
+      }
+  } catch (err) {
+      console.error(err);
+  }
+
+  var exportParams = new URLSearchParams({
+      blocation: blocation,
+      state: state,
+      country: country,
+      protocol: protocol,
+      num_observers: num_observers,
+      dist_traveled: dist_traveled,
+      notes: notes,
+      date: export_date
+  });
+
+  window.location.href = "history.php?" + exportParams.toString();
 
   document.getElementById('attribution-dialog').innerHTML = "<div class='ebird-dialog-header'>✅ Export Complete</div><div class='ebird-success'><h3>Success!</h3><p>Your checklist will start downloading momentarily.</p><p>Refer to <a target='_blank' href='https://ebird.org/content/eBirdCommon/docs/ebird_import_data_process.pdf'>this guide</a> for information on how to import it in eBird.<br>The checklist file format is: 'eBird Record Format (Extended)'.</p><div class='note'>Only detections with confidence &gt; 75% were included. Entries are limited to 1 per hour per species to comply with eBird guidelines. Always verify your checklist before submitting.</div><button class='ebird-btn-submit' onclick='closeDialog()'>Close</button></div>";
 
