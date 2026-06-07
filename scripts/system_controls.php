@@ -25,6 +25,8 @@ $_SESSION['behind_time'] = time();
 
 $restore = "cat $home/BirdSongs/restore.log";
 $max_upload_size = floor(disk_free_space("$home/BirdNET-Pi/") / 1.001);
+$db_size = file_exists("$home/BirdNET-Pi/scripts/birds.db") ? filesize("$home/BirdNET-Pi/scripts/birds.db") : 0;
+$free_space = disk_free_space("$home/BirdNET-Pi/");
 
 ?><html>
 <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -32,34 +34,63 @@ $max_upload_size = floor(disk_free_space("$home/BirdNET-Pi/") / 1.001);
 <br>
 <script>
 var seconds = 0;
-function update() {
-  if(confirm('Are you sure you want to update?')) {
-    setInterval(function(){ seconds += 1; document.getElementById('updatebtn').innerHTML = "Updating: <pre id='timer' class='bash'>"+new Date(seconds * 1000).toISOString().substring(14, 19)+"</pre>"; }, 1000);
-    return true;
-  } else {
-    return false;
+function submitSystemButton(button) {
+  const form = button.form || button.closest('form');
+  if (!form) return;
+  if (button.name) {
+    const hidden = document.createElement('input');
+    hidden.type = 'hidden';
+    hidden.name = button.name;
+    hidden.value = button.value;
+    form.appendChild(hidden);
   }
+  form.submit();
+}
+function confirmSystemCommand(event, title, message, confirmText, danger, beforeSubmit) {
+  event.preventDefault();
+  const button = event.currentTarget;
+  const run = function() {
+    if (typeof beforeSubmit === 'function') beforeSubmit();
+    submitSystemButton(button);
+  };
+  if (window.BirdNETUI) {
+    BirdNETUI.confirmAction({title: title, message: message, confirmText: confirmText, danger: danger}).then(function(ok) {
+      if (ok) run();
+    });
+  } else if (confirm(message)) {
+    run();
+  }
+  return false;
+}
+function update(event) {
+  return confirmSystemCommand(event, 'Update BirdNET-Pi', 'This will pull updates and restart services. The web UI may be unavailable while the update runs.', 'Update', false, function() {
+    setInterval(function(){ seconds += 1; document.getElementById('updatebtn').innerHTML = "Updating: <pre id='timer' class='bash'>"+new Date(seconds * 1000).toISOString().substring(14, 19)+"</pre>"; }, 1000);
+  });
 }
 </script>
 <div class="systemcontrols">
+<div class="ui-message ui-message-info" style="max-width:720px;margin:0 auto 16px;">
+  <strong>Maintenance actions</strong>
+  <span>Backup before restore or clear-data operations. Current database: <?php echo round($db_size / 1024 / 1024, 1); ?> MB. Free disk space: <?php echo round($free_space / 1024 / 1024 / 1024, 1); ?> GB.</span>
+</div>
 <form action="views.php" method="GET">
   <div>
-    <button type="submit" name="submit" value="sudo reboot" onclick="return confirm('Are you sure you want to reboot?')">Reboot</button>
+    <button type="submit" name="submit" value="sudo reboot" onclick="return confirmSystemCommand(event, 'Reboot BirdNET-Pi', 'This will restart the Raspberry Pi and temporarily stop detection.', 'Reboot', true)">Reboot</button>
   </div>
   <div>
-    <button type="submit" name="submit" id="updatebtn" value="update_birdnet.sh" onclick="return update();">Update <?php if(isset($_SESSION['behind']) && $_SESSION['behind'] != "0" && $_SESSION['behind'] != "with"){?><div class="updatenumber"><?php echo $_SESSION['behind']; ?></div><?php } ?></button>
+    <button type="submit" name="submit" id="updatebtn" value="update_birdnet.sh" onclick="return update(event);">Update <?php if(isset($_SESSION['behind']) && $_SESSION['behind'] != "0" && $_SESSION['behind'] != "with"){?><div class="updatenumber"><?php echo $_SESSION['behind']; ?></div><?php } ?></button>
   </div>
   <div>
-    <button type="submit" name="submit" value="sudo shutdown now" onclick="return confirm('Are you sure you want to shutdown?')">Shutdown</button>
+    <button type="submit" name="submit" value="sudo shutdown now" onclick="return confirmSystemCommand(event, 'Shutdown BirdNET-Pi', 'This will power down the Raspberry Pi. You will need physical access or power cycling to start it again.', 'Shutdown', true)">Shutdown</button>
   </div>
   <div>
-    <button type="submit" name="submit" value="sudo clear_all_data.sh" onclick="return confirm('Clear ALL Data? Note that this cannot be undone and will take up to 90 seconds.')">Clear ALL data</button>
+    <button type="submit" name="submit" value="sudo clear_all_data.sh" onclick="return confirmSystemCommand(event, 'Clear all data', 'This permanently deletes detection data and cannot be undone. Create a backup first if you may need this data later.', 'Clear all data', true)">Clear ALL data</button>
   </div>
 </form>
 <div id="container">
   <button id="pickfile" type="button" href="javascript:;">Restore data</button>
 </div>
-<div><a href="scripts/backup.php" download ><button onclick="return confirm('Download backup? Note that this could take a long time.')">Backup data</button></a></div>
+<div><a href="scripts/backup.php" download onclick="return window.BirdNETUI ? BirdNETUI.confirmLink(event, {title:'Download backup', message:'This may take a while for large databases. Keep the browser open until the download starts.', confirmText:'Download backup'}) : confirm('Download backup? Note that this could take a long time.')"><button>Backup data</button></a></div>
 <?php
   $cmd="cd ".$home."/BirdNET-Pi && sudo -u ".$user." git rev-list --max-count=1 HEAD";
   $curr_hash = shell_exec($cmd);
@@ -90,7 +121,22 @@ var uploader = new plupload.Uploader({
 
     init: {
         FilesAdded: function(up, files) {
-            uploader.start();
+            const startRestore = function() { uploader.start(); };
+            if (window.BirdNETUI) {
+                BirdNETUI.confirmAction({
+                    title: 'Restore data',
+                    message: 'This will restore data from the selected backup file and may overwrite current data. Make sure you selected the correct backup.',
+                    confirmText: 'Restore',
+                    danger: true
+                }).then(function(ok) {
+                    if (ok) startRestore();
+                    else uploader.removeFile(files[0]);
+                });
+            } else if (confirm('Restore data from this backup?')) {
+                startRestore();
+            } else {
+                uploader.removeFile(files[0]);
+            }
         },
 
         UploadProgress: function(up, file) {

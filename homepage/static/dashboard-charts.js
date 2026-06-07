@@ -10,7 +10,7 @@
     var heatmapChart = null;
     var imageCache = {};
 
-    function fetchChartData(callback) {
+    function fetchChartData(callback, errorCallback) {
         var xhr = new XMLHttpRequest();
         xhr.onload = function () {
             if (xhr.status === 200 && xhr.responseText.length > 0) {
@@ -19,11 +19,15 @@
                     callback(data);
                 } catch (e) {
                     console.warn('Dashboard charts: could not parse JSON', e);
+                    if (errorCallback) errorCallback('Heatmap data could not be parsed.');
                 }
+            } else if (errorCallback) {
+                errorCallback('Heatmap data could not be loaded.');
             }
         };
         xhr.onerror = function () {
             console.warn('Dashboard charts: request failed');
+            if (errorCallback) errorCallback('Heatmap request failed.');
         };
         xhr.open('GET', 'overview.php?ajax_chart_data=true', true);
         xhr.send();
@@ -49,7 +53,7 @@
         // Build datasets: one dataset per species (row), each containing 24 values
         // We'll use a simple grid rendered on canvas since Chart.js 2.x doesn't have a built-in heatmap
         var ctx = canvas.getContext('2d');
-        var width = canvas.parentElement.clientWidth || canvas.width;
+        var width = Math.max(canvas.parentElement.clientWidth || canvas.width, 760);
         var cellHeight = 32;
         var labelWidth = Math.min(220, width * 0.35);
         var chartWidth = width - labelWidth - 10;
@@ -354,13 +358,26 @@
             fetchChartData(function (data) {
                 lastData = data;
                 if (heatCanvas) {
+                    var heatmapError = document.getElementById('heatmapError');
+                    if (heatmapError) heatmapError.innerHTML = '';
                     renderHeatmap(heatCanvas, data);
+                    var heatmapUpdated = document.getElementById('heatmapUpdated');
+                    if (heatmapUpdated) {
+                        heatmapUpdated.textContent = 'Updated ' + new Date().toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+                    }
                     // Only add tooltip once
                     if (!heatCanvas.dataset.tooltipInit) {
                         addHeatmapTooltip(heatCanvas);
                         heatCanvas.dataset.tooltipInit = 'true';
                     }
                 }
+            }, function (message) {
+                var heatmapError = document.getElementById('heatmapError');
+                if (heatmapError && window.BirdNETUI) {
+                    BirdNETUI.setMessage(heatmapError, 'error', 'Heatmap unavailable', message);
+                }
+                var heatmapUpdated = document.getElementById('heatmapUpdated');
+                if (heatmapUpdated) heatmapUpdated.textContent = 'Not updated';
             });
         }
     };

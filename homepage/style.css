@@ -146,6 +146,262 @@ button:hover {
   color: var(--accent);
 }
 
+button:focus-visible,
+a:focus-visible,
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible {
+  outline: 3px solid var(--accent-light);
+  outline-offset: 2px;
+}
+
+.ui-section-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin: 12px 0;
+}
+
+.ui-section-header h2,
+.ui-section-header h3 {
+  margin: 0;
+  text-align: left;
+}
+
+.ui-meta {
+  color: var(--text-muted);
+  font-size: 0.82rem;
+  font-weight: 500;
+}
+
+.ui-message {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg-card);
+  color: var(--text-primary);
+  text-align: left;
+}
+
+.ui-message strong {
+  color: var(--text-heading);
+}
+
+.ui-message-info { border-left: 4px solid var(--accent); }
+.ui-message-success { border-left: 4px solid var(--success); }
+.ui-message-warning { border-left: 4px solid var(--warning); }
+.ui-message-error { border-left: 4px solid var(--danger); }
+
+.ui-empty-state {
+  padding: 24px;
+  border: 1px dashed var(--border);
+  border-radius: 8px;
+  background: var(--bg-secondary);
+  color: var(--text-secondary);
+  text-align: center;
+}
+
+.ui-skeleton-block {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 14px;
+}
+
+.ui-skeleton-line {
+  display: block;
+  height: 12px;
+  border-radius: 999px;
+  background: linear-gradient(90deg, var(--bg-secondary), var(--border-light), var(--bg-secondary));
+  background-size: 200% 100%;
+  animation: ui-skeleton-pulse 1.2s ease-in-out infinite;
+}
+
+@keyframes ui-skeleton-pulse {
+  0% { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+
+.ui-status-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  border-radius: 999px;
+  padding: 3px 9px;
+  border: 1px solid var(--border);
+  background: var(--bg-card);
+  color: var(--text-secondary);
+  font-size: 0.76rem;
+  font-weight: 700;
+  line-height: 1.2;
+  white-space: nowrap;
+}
+
+.ui-status-pill::before {
+  content: "";
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: currentColor;
+}
+
+.ui-status-active,
+.ui-status-complete,
+.ui-status-current {
+  color: var(--success);
+}
+
+.ui-status-warning,
+.ui-status-stale,
+.ui-status-syncing {
+  color: var(--warning);
+}
+
+.ui-status-error,
+.ui-status-missing,
+.ui-status-inactive {
+  color: var(--danger);
+}
+
+.ui-health-strip {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(155px, 1fr));
+  gap: 10px;
+  margin: 0 0 14px;
+}
+
+.ui-health-item {
+  min-height: 58px;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg-card);
+  box-shadow: var(--shadow-sm);
+  text-align: left;
+}
+
+.ui-health-label {
+  display: block;
+  margin-bottom: 5px;
+  color: var(--text-muted);
+  font-size: 0.75rem;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.ui-health-value {
+  color: var(--text-heading);
+  font-size: 0.9rem;
+  font-weight: 700;
+}
+
+.ui-legend {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  padding: 8px 0;
+  color: var(--text-secondary);
+  font-size: 0.8rem;
+}
+
+.ui-legend-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.ui-swatch {
+  width: 14px;
+  height: 14px;
+  border-radius: 4px;
+  border: 1px solid var(--border);
+  background: var(--bg-secondary);
+}
+
+.ui-swatch-empty { background: var(--border-light); }
+.ui-swatch-low { background: #c7d2fe; }
+.ui-swatch-high { background: #4f46e5; }
+
+.ui-chart-scroll {
+  width: 100%;
+  overflow-x: auto;
+  overflow-y: hidden;
+  scrollbar-width: thin;
+}
+
+.ui-confirm-dialog {
+  border: none;
+  border-radius: 8px;
+  padding: 0;
+  max-width: 420px;
+  width: calc(100vw - 32px);
+  background: var(--bg-card);
+  color: var(--text-primary);
+  box-shadow: var(--shadow-lg);
+}
+
+.ui-confirm-dialog::backdrop {
+  background: rgba(15, 23, 42, 0.45);
+}
+
+.ui-confirm-dialog form {
+  padding: 22px;
+}
+
+.ui-confirm-dialog h3 {
+  margin: 0 0 8px;
+  text-align: left;
+  font-size: 1.15rem;
+}
+
+.ui-confirm-dialog p {
+  margin: 0 0 18px;
+  color: var(--text-secondary);
+  line-height: 1.45;
+}
+
+.ui-confirm-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+}
+
+.ui-btn-primary,
+.ui-btn-secondary {
+  padding: 9px 14px;
+  border-radius: 8px;
+  font-weight: 700;
+}
+
+.ui-btn-primary {
+  background: var(--accent);
+  color: #fff;
+}
+
+.ui-btn-primary:hover {
+  background: var(--accent-hover);
+  color: #fff;
+}
+
+.ui-btn-secondary {
+  border: 1px solid var(--border);
+  background: var(--bg-button);
+}
+
+.ui-btn-danger {
+  background: var(--danger);
+}
+
+.ui-btn-danger:hover {
+  background: #dc2626;
+}
+
 .row {
   display: flex;
 }

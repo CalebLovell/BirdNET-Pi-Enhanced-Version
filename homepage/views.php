@@ -13,6 +13,11 @@ $config = get_config();
 $color_scheme = get_color_scheme();
 set_timezone();
 
+if(isset($_GET['view']) && $_GET['view'] == "Species" && (isset($_GET['ajax_species_batch']) || isset($_GET['export']))) {
+  include('scripts/species.php');
+  exit;
+}
+
 $restore = "cat $home/BirdSongs/restore.log";
 
 if(is_authenticated() && (!isset($_SESSION['behind']) || !isset($_SESSION['behind_time']) || time() > $_SESSION['behind_time'] + 86400)) {
@@ -61,6 +66,7 @@ elseif ($config["LONGITUDE"] == "0.000") {
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>BirdNET-Pi DB</title>
   <link rel="stylesheet" href="<?php echo $color_scheme . '?v=' . date('n.d.y', filemtime($color_scheme)); ?>">
+  <script src="static/ui-helpers.js?v=<?php echo date('n.d.y', filemtime('static/ui-helpers.js')); ?>" defer></script>
 </head>
 <body>
 <style>
@@ -378,7 +384,7 @@ elseif ($config["LONGITUDE"] == "0.000") {
       $feed_db->close();
     } catch(Exception $e) {}
   ?>
-    <h3 style="display:flex; align-items:center; width:100%;"><span class="live-dot"></span> Live Activity <?php echo $current_weather_str; ?></h3>
+    <h3 style="display:flex; align-items:center; width:100%;"><span class="live-dot"></span> Live Activity <span id="liveFeedUpdated" class="ui-meta" style="margin-left:8px;"></span><?php echo $current_weather_str; ?></h3>
     <ul class="feed-list" id="liveFeedList">
       <li style="padding:12px 0; text-align:center; color: var(--text-secondary, #6b7280);">Loading...</li>
     </ul>
@@ -391,6 +397,8 @@ elseif ($config["LONGITUDE"] == "0.000") {
       .then(data => {
         const list = document.getElementById('liveFeedList');
         if (!list) return;
+        const updated = document.getElementById('liveFeedUpdated');
+        if (updated) updated.textContent = 'Updated ' + new Date().toLocaleTimeString([], {hour: 'numeric', minute: '2-digit'});
         if (!data || data.length === 0) {
           list.innerHTML = '<li style="padding:12px 0; text-align:center; color: var(--text-secondary, #6b7280);">No detections today yet.</li>';
           return;
@@ -407,7 +415,10 @@ elseif ($config["LONGITUDE"] == "0.000") {
           </li>`;
         }).join('');
       })
-      .catch(() => {});
+      .catch(() => {
+        const list = document.getElementById('liveFeedList');
+        if (list) list.innerHTML = '<li style="padding:8px 0;">' + (window.BirdNETUI ? BirdNETUI.message('error', 'Live feed unavailable', 'Recent detections could not be loaded.') : 'Live feed unavailable.') + '</li>';
+      });
   }
   document.addEventListener("DOMContentLoaded", function() {
     refreshLiveFeed();

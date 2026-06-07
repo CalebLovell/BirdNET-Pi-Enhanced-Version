@@ -353,12 +353,29 @@ function deleteSpecies(species) {
   let parts = species.split(' + '); let sci_species = parts[0]; let com_species = parts[1];
   get(scriptsBase + 'species_tools.php?getcounts=' + encodeURIComponent(sci_species)).then(t => {
     let info; try { info = JSON.parse(t); } catch { alert('Could not parse count response'); return; }
-    if (!confirm('Delete ' + info.count + ' detections and local audio and png files for ' + com_species + '?')) return;
-    get(scriptsBase + 'species_tools.php?delete=' + encodeURIComponent(sci_species)).then(t2 => {
+    const runDelete = function() {
+      get(scriptsBase + 'species_tools.php?delete=' + encodeURIComponent(sci_species)).then(t2 => {
       try { const res = JSON.parse(t2); alert('Deleted ' + res.lines + ' detections and ' + res.files + ' files for ' + com_species); }
       catch { alert('Deletion complete'); }
       location.reload();
-    });
+      });
+    };
+    if (window.BirdNETUI) {
+      BirdNETUI.confirmAction({
+        title: 'Delete species data',
+        message: 'Delete ' + info.count + ' detections and local audio and png files for ' + com_species + '?',
+        confirmText: 'Delete species data',
+        danger: true
+      }).then(function(confirmed) {
+        if (confirmed) {
+          runDelete();
+        }
+      });
+      return;
+    }
+    if (confirm('Delete ' + info.count + ' detections and local audio and png files for ' + com_species + '?')) {
+      runDelete();
+    }
   });
 }
 

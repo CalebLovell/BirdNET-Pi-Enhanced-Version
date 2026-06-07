@@ -227,7 +227,7 @@ if (get_included_files()[0] === __FILE__) {
 <script>
 
 function deleteDetection(filename,copylink=false) {
-  if (confirm("Are you sure you want to delete this detection from the database?") == true) {
+  var runDelete = function() {
     const xhttp = new XMLHttpRequest();
     xhttp.onload = function() {
       if(this.responseText == "OK"){
@@ -242,6 +242,23 @@ function deleteDetection(filename,copylink=false) {
     }
     xhttp.open("GET", "play.php?deletefile="+encodeURIComponent(filename), true);
     xhttp.send();
+  };
+
+  if (window.BirdNETUI) {
+    BirdNETUI.confirmAction({
+      title: 'Delete detection',
+      message: 'This removes the detection from the database.',
+      confirmText: 'Delete',
+      danger: true
+    }).then(function(confirmed) {
+      if (confirmed) {
+        runDelete();
+      }
+    });
+    return;
+  }
+  if (confirm("Are you sure you want to delete this detection from the database?") == true) {
+    runDelete();
   }
 }
 
@@ -401,7 +418,7 @@ function changeDetection(filename,copylink=false) {
       if (newname === '') {
         return; // Exit the function early
       }
-      if (confirm("Are you sure you want to change the specie identified in this detection to " + newname + "?") == true) {
+      var runChange = function() {
         const xhttp2 = new XMLHttpRequest();
         xhttp2.onload = function() {
           if(this.responseText == "OK"){
@@ -418,6 +435,20 @@ function changeDetection(filename,copylink=false) {
         }
         xhttp2.open("GET", "play.php?changefile="+encodeURIComponent(filename)+"&newname="+encodeURIComponent(newname), true);
         xhttp2.send();
+      };
+
+      if (window.BirdNETUI) {
+        BirdNETUI.confirmAction({
+          title: 'Change detection species',
+          message: 'Change this detection to ' + newname + '?',
+          confirmText: 'Change species'
+        }).then(function(confirmed) {
+          if (confirmed) {
+            runChange();
+          }
+        });
+      } else if (confirm("Are you sure you want to change the specie identified in this detection to " + newname + "?") == true) {
+        runChange();
       }
       // Hide the modal box and reset the dropdown selection
       modal.style.display = "none";

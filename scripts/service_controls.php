@@ -32,6 +32,19 @@ function service_status($name) {
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <br>
 <div class="servicecontrols">
+<script>
+function confirmServiceReboot(event, action) {
+  if (window.BirdNETUI) {
+    return BirdNETUI.confirmSubmit(event, {
+      title: action + ' RAM drive',
+      message: 'This changes the RAM drive mount setting and reboots BirdNET-Pi.',
+      confirmText: action,
+      danger: true
+    });
+  }
+  return confirm('This will reboot, are you sure?');
+}
+</script>
 <form action="views.php" method="GET">
     <h3>Live Audio Stream <?php echo service_status("livestream.service");?></h3>
   <div role="group" class="btn-group-center">
@@ -89,10 +102,10 @@ function service_status($name) {
     <button type="submit" name="submit" value="sudo systemctl disable --now spectrogram_viewer.service">Disable</button>
     <button type="submit" name="submit" value="sudo systemctl enable --now spectrogram_viewer.service">Enable</button>
   </div>
-    <h3>Ram drive (!experimental!) <?php echo service_status(get_service_mount_name());?></h3>
+  <h3>Ram drive (!experimental!) <?php echo service_status(get_service_mount_name());?></h3>
   <div role="group" class="btn-group-center">
-    <button type="submit" name="submit" <?php do_service_mount("disable");?> onclick="return confirm('This will reboot, are you sure?')">Disable</button>
-    <button type="submit" name="submit" <?php do_service_mount("enable");?> onclick="return confirm('This will reboot, are you sure?')">Enable</button>
+    <button type="submit" name="submit" <?php do_service_mount("disable");?> onclick="return confirmServiceReboot(event, 'Disable')">Disable</button>
+    <button type="submit" name="submit" <?php do_service_mount("enable");?> onclick="return confirmServiceReboot(event, 'Enable')">Enable</button>
   </div>
   <div role="group" class="btn-group-center">
     <button type="submit" name="submit" value="stop_core_services.sh">Stop Core Services</button>

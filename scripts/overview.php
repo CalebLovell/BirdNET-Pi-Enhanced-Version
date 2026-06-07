@@ -542,7 +542,7 @@ if (get_included_files()[0] === __FILE__) {
     <h1 id="modalHeading"></h1>
     <p id="modalText"></p>
     <button onclick="hideDialog()">Close</button>
-    <button style="font-weight:bold;color:blue" onclick="if(confirm('Are you sure you want to blacklist this image?')) { blacklistImage(); }" <?php if($config["IMAGE_PROVIDER"] === 'WIKIPEDIA'){ echo 'hidden';} ?> >Blacklist this image</button>
+    <button style="font-weight:bold;color:blue" onclick="confirmBlacklistImage()" <?php if($config["IMAGE_PROVIDER"] === 'WIKIPEDIA'){ echo 'hidden';} ?> >Blacklist this image</button>
   </dialog>
   <script src="static/dialog-polyfill.js"></script>
   <script src="static/Chart.bundle.js"></script>
@@ -558,6 +558,25 @@ if (get_included_files()[0] === __FILE__) {
 
   function hideDialog() {
     document.getElementById('attribution-dialog').close();
+  }
+
+  function confirmBlacklistImage() {
+    if (window.BirdNETUI) {
+      BirdNETUI.confirmAction({
+        title: 'Blacklist image',
+        message: 'This prevents the current image from being used again for this species.',
+        confirmText: 'Blacklist image',
+        danger: true
+      }).then(function(confirmed) {
+        if (confirmed) {
+          blacklistImage();
+        }
+      });
+      return;
+    }
+    if (confirm('Are you sure you want to blacklist this image?')) {
+      blacklistImage();
+    }
   }
 
   function blacklistImage() {
@@ -701,6 +720,16 @@ if (get_included_files()[0] === __FILE__) {
   </style>  
 <div class="overview-stats">
 <div class="right-column">
+<div class="ui-section-header">
+  <h3>System Health</h3>
+  <span id="overviewHealthUpdated" class="ui-meta">Loading...</span>
+</div>
+<div id="overviewHealthStrip" class="ui-health-strip">
+  <div class="ui-health-item"><?php echo '<script>document.write(window.BirdNETUI ? BirdNETUI.skeleton(2) : "Loading...")</script>'; ?></div>
+  <div class="ui-health-item"><?php echo '<script>document.write(window.BirdNETUI ? BirdNETUI.skeleton(2) : "Loading...")</script>'; ?></div>
+  <div class="ui-health-item"><?php echo '<script>document.write(window.BirdNETUI ? BirdNETUI.skeleton(2) : "Loading...")</script>'; ?></div>
+</div>
+<div id="overviewHealthError" style="margin-bottom:10px;"></div>
 <div class="left-column" style="flex: unset; padding-left: 0; margin-bottom: 8px;"></div>
 <div class="center-column">
 </div>
@@ -708,8 +737,20 @@ if (get_included_files()[0] === __FILE__) {
 // New/Rare species lists removed for KPI redesign
 ?>
 <div class="chart-container" style="max-width: 100%;">
-  <div class="chart-canvas-wrapper" style="max-width: 100%; margin:8px auto 0;overflow:hidden;">
+  <div class="ui-section-header">
+    <h3>Today's Activity Heatmap</h3>
+    <span id="heatmapUpdated" class="ui-meta">Loading...</span>
+  </div>
+  <div id="heatmapError" style="margin-bottom:8px;"></div>
+  <div class="chart-canvas-wrapper ui-chart-scroll" style="max-width: 100%; margin:8px auto 0;">
     <canvas id="hourlyHeatmap"></canvas>
+  </div>
+  <div class="ui-legend" aria-label="Heatmap legend">
+    <span class="ui-legend-item"><span class="ui-swatch ui-swatch-empty"></span>No detections</span>
+    <span class="ui-legend-item"><span class="ui-swatch ui-swatch-low"></span>Lower activity</span>
+    <span class="ui-legend-item"><span class="ui-swatch ui-swatch-high"></span>Higher activity</span>
+    <span class="ui-legend-item">Weather row shows hourly temperature and conditions</span>
+    <span class="ui-legend-item">Highlighted hour is the current hour</span>
   </div>
 </div>
 <?php
@@ -720,8 +761,12 @@ if($dividedrefresh < 1) {
 }
 ?>
 
-<h3>5 Most Recent Detections</h3>
-<div style="padding-bottom:8px;" id="detections_table"><h3>Loading...</h3></div>
+<div class="ui-section-header">
+  <h3>5 Most Recent Detections</h3>
+  <span id="recentDetectionsUpdated" class="ui-meta">Loading...</span>
+</div>
+<div id="recentDetectionsError" style="margin-bottom:8px;"></div>
+<div style="padding-bottom:8px;" id="detections_table"><script>document.write(window.BirdNETUI ? BirdNETUI.skeleton(4) : '<h3>Loading...</h3>');</script></div>
 
 <div id="customimage"></div>
 <br>
@@ -758,6 +803,8 @@ function loadLeftChart() {
   xhttp.onload = function() {
     if(this.responseText.length > 0 && !this.responseText.includes("Database is busy")) {
       document.getElementsByClassName("left-column")[0].innerHTML = this.responseText;
+      const updated = document.getElementById("overviewHealthUpdated");
+      if (updated) updated.textContent = "Updated " + new Date().toLocaleTimeString([], {hour: "numeric", minute: "2-digit"});
       loadCenterChart();
     }
   }
@@ -819,7 +866,15 @@ function loadFiveMostRecentDetections() {
   xhttp.onload = function() {
     if(this.responseText.length > 0 && !this.responseText.includes("Database is busy")) {
       document.getElementById("detections_table").innerHTML= this.responseText;
+      document.getElementById("recentDetectionsError").innerHTML = "";
+      const updated = document.getElementById("recentDetectionsUpdated");
+      if (updated) updated.textContent = "Updated " + new Date().toLocaleTimeString([], {hour: "numeric", minute: "2-digit"});
+    } else if (this.responseText.includes("Database is busy")) {
+      if (window.BirdNETUI) BirdNETUI.setMessage("#recentDetectionsError", "warning", "Database busy", "Recent detections will retry automatically.");
     }
+  }
+  xhttp.onerror = function() {
+    if (window.BirdNETUI) BirdNETUI.setMessage("#recentDetectionsError", "error", "Recent detections unavailable", "The latest detections could not be loaded.");
   }
   if (window.innerWidth > 500) {
     xhttp.open("GET", "todays_detections.php?ajax_detections=true&display_limit=undefined&hard_limit=5", true);
@@ -827,6 +882,37 @@ function loadFiveMostRecentDetections() {
     xhttp.open("GET", "todays_detections.php?ajax_detections=true&display_limit=undefined&hard_limit=5&mobile=true", true);
   }
   xhttp.send();
+}
+function renderOverviewHealthItem(label, value, status) {
+  const safeLabel = window.BirdNETUI ? BirdNETUI.escapeHtml(label) : label;
+  const safeValue = window.BirdNETUI ? BirdNETUI.escapeHtml(value) : value;
+  const pill = window.BirdNETUI && status ? BirdNETUI.statusPill(status, value) : safeValue;
+  return '<div class="ui-health-item"><span class="ui-health-label">' + safeLabel + '</span><span class="ui-health-value">' + pill + '</span></div>';
+}
+function loadOverviewHealth() {
+  const strip = document.getElementById("overviewHealthStrip");
+  if (!strip) return;
+  Promise.all([
+    fetch("/api/v1/system/health").then(r => r.json()),
+    fetch("/api/v1/weather/current").then(r => r.json())
+  ]).then(([health, weather]) => {
+    const dbSize = window.BirdNETUI ? BirdNETUI.formatBytes(health.database.size_bytes) : health.database.size_bytes + " bytes";
+    const diskUsed = health.disk.used_percent === null ? "Unknown" : health.disk.used_percent + "% used";
+    const lastDetection = health.last_detection_at ? health.last_detection_at : "No detections";
+    const weatherLabel = weather.status === "current" ? (weather.temp + "°F " + weather.condition) : (weather.last_synced_at ? "Missing current hour; last " + weather.last_synced_at : "Missing current hour");
+    strip.innerHTML =
+      renderOverviewHealthItem("Recording", health.services.recording.status, health.services.recording.ok ? "active" : "inactive") +
+      renderOverviewHealthItem("Analysis", health.services.analysis.status, health.services.analysis.ok ? "active" : "inactive") +
+      renderOverviewHealthItem("Disk", diskUsed, health.disk.used_percent !== null && health.disk.used_percent > 90 ? "warning" : "active") +
+      renderOverviewHealthItem("Database", dbSize, "complete") +
+      renderOverviewHealthItem("Last Detection", lastDetection, health.last_detection_at ? "active" : "warning") +
+      renderOverviewHealthItem("Weather", weatherLabel, weather.status || "missing");
+    document.getElementById("overviewHealthError").innerHTML = "";
+    const updated = document.getElementById("overviewHealthUpdated");
+    if (updated) updated.textContent = "Updated " + new Date().toLocaleTimeString([], {hour: "numeric", minute: "2-digit"});
+  }).catch(() => {
+    if (window.BirdNETUI) BirdNETUI.setMessage("#overviewHealthError", "error", "Health status unavailable", "System health details could not be loaded.");
+  });
 }
 function refreshCustomImage(){
   // Find the customimage element
@@ -852,6 +938,7 @@ customImage = true;
 customImage = false;
 <?php } ?>
 window.addEventListener("load", function(){
+  loadOverviewHealth();
   loadDetectionIfNewExists();
 });
 document.addEventListener("visibilitychange", function() {
@@ -884,7 +971,7 @@ startAutoRefresh();
 </style>
 <script src="static/custom-audio-player.js"></script>
 <script src="static/generateMiniGraph.js"></script>
-<script src="static/dashboard-charts.js?v=7"></script>
+<script src="static/dashboard-charts.js?v=8"></script>
 <script>if(window.DashboardCharts){DashboardCharts.refresh();}</script>
 <script>
 // Listen for the scroll event on the window object

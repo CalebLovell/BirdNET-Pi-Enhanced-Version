@@ -229,6 +229,19 @@ $config = get_config($force_reload=true);
   </head>
 <div class="settings">
       <div class="brbanner"><h1>Basic Settings</h1></div><br>
+      <div class="ui-message ui-message-info" style="max-width:960px;margin:0 auto 14px;">
+        <strong>Settings are grouped by workflow.</strong>
+        <span>Detection, location/weather, notifications, species information, appearance, and time settings can be reviewed from this page. Advanced audio and storage controls remain under Advanced Settings.</span>
+      </div>
+      <div class="ui-legend" style="justify-content:center;margin-bottom:16px;">
+        <a class="ui-status-pill" href="#settings-detection">Detection</a>
+        <a class="ui-status-pill" href="#settings-weather">Weather</a>
+        <a class="ui-status-pill" href="#settings-notifications">Notifications</a>
+        <a class="ui-status-pill" href="#settings-species">Species</a>
+        <a class="ui-status-pill" href="#settings-webui">Web UI</a>
+        <a class="ui-status-pill" href="#settings-time">Time</a>
+        <a class="ui-status-pill" href="views.php?view=Advanced">Advanced</a>
+      </div>
     <form id="basicform" action=""  method="GET">
 
 
@@ -262,7 +275,7 @@ function sendTestNotification(e) {
 }
 </script>
       <table class="settingstable"><tr><td>
-      <h2>Model</h2>
+      <h2 id="settings-detection">Detection Model</h2>
 
       <label for="model">Select a Model: </label>
       <select id="modelsel" name="model" class="testbtn">
@@ -396,7 +409,7 @@ function runProcess() {
       </td></tr></table><br>
 
       <table class="settingstable"><tr><td>
-      <h2>Location</h2>
+      <h2 id="settings-weather">Location & Weather</h2>
       <table class="settingstable plaintable">
         <tr>
           <td><label for="site_name">Site Name:</label></td>
@@ -430,7 +443,7 @@ function runProcess() {
         <dt>NOTE - by using your BirdWeather Token - you are consenting to sharing your soundscapes and detections with BirdWeather</dt></p>
       </td></tr></table><br>
       <table class="settingstable" style="width:100%"><tr><td>
-      <h2>Notifications</h2>
+      <h2 id="settings-notifications">Notifications</h2>
       <p><a target="_blank" href="https://github.com/caronc/apprise/wiki">Apprise Notifications</a> can be setup and enabled for 90+ notification services. Each service should be on its own line.</p>
       <label for="apprise_input">Apprise Notifications Configuration: </label><br>
       <textarea placeholder="mailto://{user}:{password}@gmail.com
@@ -500,7 +513,7 @@ https://discordapp.com/api/webhooks/{WebhookID}/{WebhookToken}
       <span id="testsuccessmsg"></span>
       </td></tr></table><br>
       <table class="settingstable"><tr><td>
-      <h2>Bird Photo Source</h2>
+      <h2 id="settings-species">Species Images</h2>
       <label for="image_provider">Image Provider: </label>
       <select name="image_provider" class="testbtn">
         <option value="" <?php if(empty($config['IMAGE_PROVIDER'])) { echo 'selected'; } ?>>None</option>
@@ -515,7 +528,7 @@ https://discordapp.com/api/webhooks/{WebhookID}/{WebhookToken}
       <input name="flickr_filter_email" type="email" size="24" placeholder="myflickraccount@gmail.com" value="<?php print($config['FLICKR_FILTER_EMAIL']);?>"/><br>
       </td></tr></table><br>
       <table class="settingstable"><tr><td>
-      <h2>Localization</h2>
+      <h2 id="settings-webui">Language & Species Info</h2>
       <label for="language">Database Language: </label>
       <select name="language" class="testbtn">
       <?php
@@ -603,7 +616,7 @@ https://discordapp.com/api/webhooks/{WebhookID}/{WebhookToken}
 
 
       <table class="settingstable"><tr><td>
-      <h2>Color scheme </h2>
+      <h2>Color scheme</h2>
       Note: when changing themes the daily chart may need a page refresh before updating.<br><br>
       <label for="color_scheme">Color scheme for the site : </label>
       <select name="color_scheme" class="testbtn">
@@ -646,7 +659,7 @@ https://discordapp.com/api/webhooks/{WebhookID}/{WebhookToken}
       }
       ?>
       <table class="settingstable"><tr><td>
-      <h2>Time and Date</h2>
+      <h2 id="settings-time">Time and Date</h2>
       <span>If connected to the internet, retrieve time automatically?</span>
       <input type="checkbox" onchange='handleChange(this)' <?php echo $checkedvalue; ?> ><br>
       <?php

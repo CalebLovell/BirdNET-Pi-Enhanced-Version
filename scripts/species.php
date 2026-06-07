@@ -8,6 +8,10 @@ $config = get_config();
 $time_period = isset($_GET['time_period']) ? $_GET['time_period'] : 'all';
 $sort_by = isset($_GET['sort_by']) ? $_GET['sort_by'] : 'detections';
 $search = isset($_GET['search']) ? $_GET['search'] : '';
+$species_page_size = request_int($_GET, 'limit', 50, 1, 100);
+$species_offset = request_int($_GET, 'offset', 0, 0, 1000000);
+$is_species_ajax = isset($_GET['ajax_species_batch']) && $_GET['ajax_species_batch'] == 'true';
+$is_csv_export = isset($_GET['export']) && $_GET['export'] == 'csv';
 
 $db = get_db();
 
@@ -43,15 +47,50 @@ switch ($sort_by) {
     case 'confidence': $order_by = "MAX(Confidence) DESC"; break;
 }
 
-$list_stmt = $db->prepare("SELECT Com_Name, Sci_Name, COUNT(*) as Count, MAX(Confidence) as MaxConf, MIN(Date) as FirstDate, File_Name FROM detections $where_sql GROUP BY Sci_Name ORDER BY $order_by");
+$count_stmt = $db->prepare("SELECT COUNT(*) AS total FROM (SELECT Sci_Name FROM detections $where_sql GROUP BY Sci_Name)");
+if (!empty($search)) {
+    $count_stmt->bindValue(':search', '%' . $search . '%', SQLITE3_TEXT);
+}
+$species_total = (int)$count_stmt->execute()->fetchArray(SQLITE3_ASSOC)['total'];
+
+$list_sql = "SELECT Com_Name, Sci_Name, COUNT(*) as Count, MAX(Confidence) as MaxConf, MIN(Date) as FirstDate, File_Name FROM detections $where_sql GROUP BY Sci_Name ORDER BY $order_by";
+if (!$is_csv_export) {
+    $list_sql .= " LIMIT :limit OFFSET :offset";
+}
+$list_stmt = $db->prepare($list_sql);
 if (!empty($search)) {
     $list_stmt->bindValue(':search', '%' . $search . '%', SQLITE3_TEXT);
+}
+if (!$is_csv_export) {
+    $list_stmt->bindValue(':limit', $species_page_size, SQLITE3_INTEGER);
+    $list_stmt->bindValue(':offset', $species_offset, SQLITE3_INTEGER);
 }
 $list_res = $list_stmt->execute();
 
 $species_list = [];
 while ($row = $list_res->fetchArray(SQLITE3_ASSOC)) {
     $species_list[] = $row;
+}
+
+if ($is_csv_export) {
+    while (ob_get_level() > 0) {
+        ob_end_clean();
+    }
+    header('Content-Type: text/csv');
+    header('Content-Disposition: attachment; filename="species_list.csv"');
+    $output = fopen('php://output', 'w');
+    fputcsv($output, ['Common Name', 'Scientific Name', 'Detections', 'Max Confidence', 'First Detected'], ',', '"', '');
+    foreach ($species_list as $bird) {
+        fputcsv($output, [
+            $bird['Com_Name'],
+            $bird['Sci_Name'],
+            $bird['Count'],
+            round($bird['MaxConf'] * 100, 1) . '%',
+            $bird['FirstDate']
+        ], ',', '"', '');
+    }
+    fclose($output);
+    exit();
 }
 
 // Image fetching logic
@@ -68,6 +107,81 @@ if (isset($config['IMAGE_PROVIDER']) && strtolower($config['IMAGE_PROVIDER']) ==
 
 if ($image_provider && $image_provider->is_reset()) {
     $_SESSION['species_portal_v8_cache'] = [];
+}
+
+function render_species_cards($species_list, $image_provider, $fallback_provider, $config) {
+    ob_start();
+    foreach ($species_list as $bird):
+        $com_name = $bird['Com_Name'];
+        $sci_name = $bird['Sci_Name'];
+        $image_url = 'images/bird.png';
+
+        if ($image_provider) {
+            if (!isset($_SESSION['species_portal_v8_cache'])) {
+                $_SESSION['species_portal_v8_cache'] = [];
+            }
+
+            $search_name = trim($com_name);
+            $key = array_search($search_name, array_column($_SESSION['species_portal_v8_cache'], 0));
+
+            if ($key !== false) {
+                $image = $_SESSION['species_portal_v8_cache'][$key];
+            } else {
+                $cached_image = $image_provider->get_image($sci_name, $fallback_provider);
+                if ($cached_image && !empty($cached_image["image_url"])) {
+                    $image_data = array($search_name, $cached_image["image_url"], $cached_image["title"], $cached_image["photos_url"], $cached_image["author_url"], $cached_image["license_url"]);
+                    array_push($_SESSION["species_portal_v8_cache"], $image_data);
+                    $image = $image_data;
+                } else {
+                    $image_data = array($search_name, "", "Not Found", "", "", "");
+                    array_push($_SESSION["species_portal_v8_cache"], $image_data);
+                    $image = $image_data;
+                }
+            }
+            $image_url = ($image && !empty($image[1])) ? $image[1] : 'images/bird.png';
+        }
+
+        $info = get_info_url($sci_name);
+        $wiki_url = 'https://wikipedia.org/wiki/' . str_replace('%20', '_', rawurlencode($sci_name));
+?>
+            <div class="bird-card">
+                <div class="bird-image-container">
+                    <img src="<?php echo h($image_url); ?>" alt="<?php echo h($com_name); ?>" class="bird-image" loading="lazy" onerror="this.onerror=null; this.src='images/bird.png'">
+                </div>
+                <div class="card-content">
+                    <span class="bird-name"><?php echo h($com_name); ?></span>
+                    <span class="bird-sci"><?php echo h($sci_name); ?></span>
+                    <table class="stats-table">
+                        <tr><td>Detections:</td><td><?php echo number_format($bird['Count']); ?></td></tr>
+                        <tr><td>Confidence:</td><td><?php echo round($bird['MaxConf'] * 100, 1); ?>%</td></tr>
+                        <tr><td>First:</td><td><?php echo date('n/j/Y', strtotime($bird['FirstDate'])); ?></td></tr>
+                    </table>
+                    <div class="species-card-links">
+                        <a href="<?php echo h($info['URL']); ?>" target="_blank" rel="noopener noreferrer" class="mrd-link-pill">
+                            <img src="images/info.png" alt=""> <?php echo h($info['TITLE']); ?>
+                        </a>
+                        <a href="<?php echo h($wiki_url); ?>" target="_blank" rel="noopener noreferrer" class="mrd-link-pill">
+                            <img src="images/wiki.png" alt=""> Wikipedia
+                        </a>
+                    </div>
+                </div>
+            </div>
+<?php
+    endforeach;
+    return ob_get_clean();
+}
+
+if ($is_species_ajax) {
+    header('Content-Type: application/json');
+    $next_offset = $species_offset + count($species_list);
+    echo json_encode([
+        'html' => render_species_cards($species_list, $image_provider, $fallback_provider, $config),
+        'count' => count($species_list),
+        'next_offset' => $next_offset,
+        'total' => $species_total,
+        'has_more' => $next_offset < $species_total
+    ]);
+    exit;
 }
 
 
@@ -247,7 +361,7 @@ if ($image_provider && $image_provider->is_reset()) {
             <div class="filter-grid">
                 <div class="filter-group">
                     <label>Time Period</label>
-                    <select name="time_period" class="styled-select" onchange="this.form.submit()">
+                    <select name="time_period" class="styled-select" data-ui-persist="species-time-period" onchange="this.form.submit()">
                         <option value="all" <?php echo $time_period == 'all' ? 'selected' : ''; ?>>All Time</option>
                         <option value="24h" <?php echo $time_period == '24h' ? 'selected' : ''; ?>>Last 24 Hours</option>
                         <option value="7d" <?php echo $time_period == '7d' ? 'selected' : ''; ?>>Last 7 Days</option>
@@ -258,7 +372,7 @@ if ($image_provider && $image_provider->is_reset()) {
                 </div>
                 <div class="filter-group">
                     <label>Sort By</label>
-                    <select name="sort_by" class="styled-select" onchange="this.form.submit()">
+                    <select name="sort_by" class="styled-select" data-ui-persist="species-sort-by" onchange="this.form.submit()">
                         <option value="detections" <?php echo $sort_by == 'detections' ? 'selected' : ''; ?>>Most Detections</option>
                         <option value="com_name" <?php echo $sort_by == 'com_name' ? 'selected' : ''; ?>>Common Name</option>
                         <option value="sci_name" <?php echo $sort_by == 'sci_name' ? 'selected' : ''; ?>>Scientific Name</option>
@@ -267,11 +381,11 @@ if ($image_provider && $image_provider->is_reset()) {
                 </div>
                 <div class="filter-group search-group">
                     <label>Search Species</label>
-                    <input type="text" name="search" class="styled-input" placeholder="Search by name..." value="<?php echo htmlspecialchars($search); ?>">
+                    <input type="text" name="search" class="styled-input" data-ui-persist="species-search" placeholder="Search by name..." value="<?php echo htmlspecialchars($search); ?>">
                 </div>
             </div>
             <div class="filter-footer">
-                <span class="results-count"><?php echo count($species_list); ?> species</span>
+                <span class="results-count" id="species-results-count">Showing <?php echo min($species_total, $species_offset + count($species_list)); ?> of <?php echo number_format($species_total); ?> species</span>
                 <div class="filter-actions">
                     <a href="?view=Species" class="btn-reset">Reset</a>
                     <button type="submit" class="btn-apply text-white">Apply Filters</button>
@@ -281,93 +395,71 @@ if ($image_provider && $image_provider->is_reset()) {
         </form>
     </div>
 
-    <div class="species-grid">
-        <?php foreach ($species_list as $bird): 
-            $com_name = $bird['Com_Name'];
-            $sci_name = $bird['Sci_Name'];
-            
-            // Get image
-            $image_url = 'images/bird.png';
-            $image = false;
-            $debug_msg = "No Provider";
-
-            if ($image_provider) {
-                if (!isset($_SESSION['species_portal_v8_cache'])) {
-                    $_SESSION['species_portal_v8_cache'] = [];
-                }
-                
-                $search_name = trim($com_name);
-                $key = array_search($search_name, array_column($_SESSION['species_portal_v8_cache'], 0));
-                
-                if ($key !== false) {
-                    $image = $_SESSION['species_portal_v8_cache'][$key];
-                    $debug_msg = "Session Match. URL: " . (empty($image[1]) ? "EMPTY" : "OK") . " | Source: " . ($image[1] ?? 'N/A');
-                } else {
-                    $cached_image = $image_provider->get_image($sci_name, $fallback_provider);
-                    if ($cached_image && !empty($cached_image["image_url"])) {
-                        $debug_msg = "Fetched Fresh. URL: " . $cached_image["image_url"];
-                        $image_data = array($search_name, $cached_image["image_url"], $cached_image["title"], $cached_image["photos_url"], $cached_image["author_url"], $cached_image["license_url"]);
-                        array_push($_SESSION["species_portal_v8_cache"], $image_data);
-                        $image = $image_data;
-                    } else {
-                        $debug_msg = "Fetch Failed. Scientific name: " . $sci_name;
-                        // Cache the failure with an empty URL so we don't retry every time
-                        $image_data = array($search_name, "", "Not Found", "", "", "");
-                        array_push($_SESSION["species_portal_v8_cache"], $image_data);
-                        $image = $image_data;
-                    }
-                }
-                $image_url = ($image && !empty($image[1])) ? $image[1] : 'images/bird.png';
-            }
-        ?>
-            <div class="bird-card">
-                <div class="bird-image-container">
-                    <img src="<?php echo h($image_url); ?>" alt="<?php echo h($com_name); ?>" class="bird-image" onerror="this.onerror=null; this.src='images/bird.png'">
-                </div>
-                <div class="card-content">
-                    <span class="bird-name"><?php echo h($com_name); ?></span>
-                    <span class="bird-sci"><?php echo h($sci_name); ?></span>
-                    <table class="stats-table">
-                        <tr><td>Detections:</td><td><?php echo number_format($bird['Count']); ?></td></tr>
-                        <tr><td>Confidence:</td><td><?php echo round($bird['MaxConf'] * 100, 1); ?>%</td></tr>
-                        <tr><td>First:</td><td><?php echo date('n/j/Y', strtotime($bird['FirstDate'])); ?></td></tr>
-                    </table>
-                    <?php
-                        $info = get_info_url($sci_name);
-                        $wiki_url = 'https://wikipedia.org/wiki/' . str_replace('%20', '_', rawurlencode($sci_name));
-                    ?>
-                    <div class="species-card-links">
-                        <a href="<?php echo h($info['URL']); ?>" target="_blank" rel="noopener noreferrer" class="mrd-link-pill">
-                            <img src="images/info.png" alt=""> <?php echo h($info['TITLE']); ?>
-                        </a>
-                        <a href="<?php echo h($wiki_url); ?>" target="_blank" rel="noopener noreferrer" class="mrd-link-pill">
-                            <img src="images/wiki.png" alt=""> Wikipedia
-                        </a>
-                    </div>
-                </div>
-            </div>
-        <?php endforeach; ?>
+    <div class="species-grid" id="species-grid">
+        <?php echo render_species_cards($species_list, $image_provider, $fallback_provider, $config); ?>
+    </div>
+    <div id="species-load-error" style="margin-top:16px;"></div>
+    <?php $next_species_offset = $species_offset + count($species_list); ?>
+    <div style="text-align:center; margin:24px 0;" id="species-load-more-wrap" <?php if($next_species_offset >= $species_total) echo 'hidden'; ?>>
+        <button type="button" class="btn-apply" id="species-load-more" data-next-offset="<?php echo $next_species_offset; ?>">Load 50 More</button>
     </div>
 </div>
 
-<?php
-// Handle CSV export
-if (isset($_GET['export']) && $_GET['export'] == 'csv') {
-    ob_end_clean();
-    header('Content-Type: text/csv');
-    header('Content-Disposition: attachment; filename="species_list.csv"');
-    $output = fopen('php://output', 'w');
-    fputcsv($output, ['Common Name', 'Scientific Name', 'Detections', 'Max Confidence', 'First Detected'], ',', '"', '');
-    foreach ($species_list as $bird) {
-        fputcsv($output, [
-            $bird['Com_Name'],
-            $bird['Sci_Name'],
-            $bird['Count'],
-            round($bird['MaxConf'] * 100, 1) . '%',
-            $bird['FirstDate']
-        ], ',', '"', '');
-    }
-    fclose($output);
-    exit();
-}
-?>
+<script>
+(function() {
+    var urlParams = new URLSearchParams(window.location.search);
+    var filterForm = document.getElementById('species-filters');
+    var shouldAutoApplyPersistedFilters = filterForm && !urlParams.has('time_period') && !urlParams.has('sort_by') && !urlParams.has('search');
+    var persistedFilterTimer;
+    document.addEventListener('birdnet:restored', function(event) {
+        if (!shouldAutoApplyPersistedFilters || !filterForm || !filterForm.contains(event.target)) return;
+        clearTimeout(persistedFilterTimer);
+        persistedFilterTimer = setTimeout(function() {
+            filterForm.submit();
+        }, 50);
+    });
+
+    var btn = document.getElementById('species-load-more');
+    if (!btn) return;
+    var grid = document.getElementById('species-grid');
+    var countLabel = document.getElementById('species-results-count');
+    var errorBox = document.getElementById('species-load-error');
+    var total = <?php echo (int)$species_total; ?>;
+    var pageSize = <?php echo (int)$species_page_size; ?>;
+
+    btn.addEventListener('click', function() {
+        var nextOffset = parseInt(btn.dataset.nextOffset || '0', 10);
+        var params = new URLSearchParams(window.location.search);
+        params.set('view', 'Species');
+        params.set('ajax_species_batch', 'true');
+        params.set('limit', pageSize);
+        params.set('offset', nextOffset);
+        btn.disabled = true;
+        btn.textContent = 'Loading species...';
+        if (errorBox) errorBox.innerHTML = '';
+
+        fetch('views.php?' + params.toString(), { headers: { 'Accept': 'application/json' } })
+            .then(function(response) {
+                if (!response.ok) throw new Error('Species request failed');
+                return response.json();
+            })
+            .then(function(data) {
+                grid.insertAdjacentHTML('beforeend', data.html || '');
+                btn.dataset.nextOffset = data.next_offset;
+                if (countLabel) countLabel.textContent = 'Showing ' + data.next_offset.toLocaleString() + ' of ' + total.toLocaleString() + ' species';
+                if (!data.has_more) {
+                    document.getElementById('species-load-more-wrap').hidden = true;
+                }
+            })
+            .catch(function() {
+                if (window.BirdNETUI && errorBox) {
+                    BirdNETUI.setMessage(errorBox, 'error', 'Species load failed', 'More species could not be loaded. Try again.');
+                }
+            })
+            .finally(function() {
+                btn.disabled = false;
+                btn.textContent = 'Load 50 More';
+            });
+    });
+})();
+</script>

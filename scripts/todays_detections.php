@@ -339,7 +339,7 @@ if (get_included_files()[0] === __FILE__) {
     <h1 id="modalHeading"></h1>
     <p id="modalText"></p>
     <button style="font-weight:bold;color:blue" onclick="hideDialog()">Close</button>
-    <button style="font-weight:bold;color:blue" onclick="if(confirm('Are you sure you want to blacklist this image?')) { blacklistImage(); }" <?php if($config["IMAGE_PROVIDER"] === 'WIKIPEDIA'){ echo 'hidden';} ?> >Blacklist this image</button>
+    <button style="font-weight:bold;color:blue" onclick="confirmBlacklistImage()" <?php if($config["IMAGE_PROVIDER"] === 'WIKIPEDIA'){ echo 'hidden';} ?> >Blacklist this image</button>
   </dialog>
   <script src="static/dialog-polyfill.js"></script>
   <script src="static/Chart.bundle.js"></script>
@@ -347,7 +347,7 @@ if (get_included_files()[0] === __FILE__) {
   
   <script>
     function deleteDetection(filename,copylink=false) {
-    if (confirm("Are you sure you want to delete this detection from the database?") == true) {
+    var runDelete = function() {
       const xhttp = new XMLHttpRequest();
       xhttp.onload = function() {
         if(this.responseText == "OK"){
@@ -362,6 +362,23 @@ if (get_included_files()[0] === __FILE__) {
       }
       xhttp.open("GET", "play.php?deletefile="+encodeURIComponent(filename), true);
       xhttp.send();
+    };
+
+    if (window.BirdNETUI) {
+      BirdNETUI.confirmAction({
+        title: 'Delete detection',
+        message: 'This removes the detection from the database.',
+        confirmText: 'Delete',
+        danger: true
+      }).then(function(confirmed) {
+        if (confirmed) {
+          runDelete();
+        }
+      });
+      return;
+    }
+    if (confirm("Are you sure you want to delete this detection from the database?") == true) {
+      runDelete();
     }
   }
 
@@ -375,6 +392,25 @@ if (get_included_files()[0] === __FILE__) {
 
   function hideDialog() {
     document.getElementById('attribution-dialog').close();
+  }
+
+  function confirmBlacklistImage() {
+    if (window.BirdNETUI) {
+      BirdNETUI.confirmAction({
+        title: 'Blacklist image',
+        message: 'This prevents the current image from being used again for this species.',
+        confirmText: 'Blacklist image',
+        danger: true
+      }).then(function(confirmed) {
+        if (confirmed) {
+          blacklistImage();
+        }
+      });
+      return;
+    }
+    if (confirm('Are you sure you want to blacklist this image?')) {
+      blacklistImage();
+    }
   }
 
   function blacklistImage() {

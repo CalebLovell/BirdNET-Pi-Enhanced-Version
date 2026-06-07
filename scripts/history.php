@@ -314,6 +314,7 @@ if (get_included_files()[0] === __FILE__) {
 </style>
 
 <script src="static/dialog-polyfill.js"></script>
+<script src="static/ui-helpers.js?v=<?php echo file_exists('static/ui-helpers.js') ? date('n.d.y', filemtime('static/ui-helpers.js')) : '1'; ?>"></script>
 <div class="history centered">
 
 <dialog id="attribution-dialog">
@@ -363,9 +364,14 @@ if (get_included_files()[0] === __FILE__) {
       <label>Notes <span class="ebird-tooltip"><svg xmlns="http://www.apache.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="16" x2="12" y2="12"></line><line x1="12" y1="8" x2="12.01" y2="8"></line></svg><span class="ebird-tooltip-text">Optional checklist comments (e.g., "Automated recording station run by BirdNET-Pi").</span></span></label>
       <input placeholder="Optional notes..." id="notes">
     </div>
+    <div id="ebird-preview" class="ui-message ui-message-info">
+      <strong>Export preview</strong>
+      <span>Select a date to preview eligible rows before downloading.</span>
+    </div>
+    <div id="ebird-form-message"></div>
     <div class="ebird-actions">
       <button class="ebird-btn-cancel" onclick="closeDialog()">Cancel</button>
-      <button class="ebird-btn-submit" onclick="submitID()">Export Checklist</button>
+      <button class="ebird-btn-submit" id="ebird-export-submit" onclick="submitID()">Export Checklist</button>
     </div>
   </div>
 </dialog>
@@ -375,40 +381,83 @@ dialogPolyfill.registerDialog(dialog);
 
 function showDialog() {
   document.getElementById('attribution-dialog').showModal();
+  refreshEbirdPreview();
 }
 
 function closeDialog() {
   document.getElementById('attribution-dialog').close();
 }
 
+function setEbirdMessage(type, title, detail) {
+  var target = document.getElementById("ebird-form-message");
+  if (!target) return;
+  if (window.BirdNETUI) BirdNETUI.setMessage(target, type, title, detail);
+  else target.textContent = title + (detail ? " " + detail : "");
+}
+
+function getEbirdFormValues() {
+  return {
+    blocation: document.getElementById("blocation").value.trim(),
+    state: document.getElementById("state").value.trim(),
+    country: document.getElementById("country").value.trim(),
+    protocol: document.getElementById("protocol").value,
+    num_observers: document.getElementById("num_observers").value,
+    dist_traveled: document.getElementById("dist_traveled").value,
+    notes: document.getElementById("notes").value,
+    export_date: document.getElementById("export_date").value
+  };
+}
+
+function validateEbirdForm(values) {
+  if (!values.blocation || !values.state || !values.country || !values.num_observers || !values.export_date) {
+    return "Please fill out all required fields.";
+  }
+  if (values.country.length !== 2) {
+    return "Country Code must be exactly 2 letters.";
+  }
+  if (values.protocol === "traveling" && !values.dist_traveled) {
+    return "Distance Traveled is required for the Traveling protocol.";
+  }
+  return "";
+}
+
+async function refreshEbirdPreview() {
+  var preview = document.getElementById("ebird-preview");
+  var submit = document.getElementById("ebird-export-submit");
+  var values = getEbirdFormValues();
+  if (!preview || !values.export_date) return;
+  preview.innerHTML = window.BirdNETUI ? BirdNETUI.skeleton(2) : "Loading preview...";
+
+  try {
+    var response = await fetch("/api/v1/exports/ebird/preview?date=" + encodeURIComponent(values.export_date), {
+      headers: { "Accept": "application/json" }
+    });
+    var data = await response.json();
+    var warning = data.warnings && data.warnings.length ? data.warnings.join(" ") : "";
+    var title = data.row_count ? data.row_count.toLocaleString() + " CSV rows ready" : "No eligible rows";
+    var detail = data.detection_count.toLocaleString() + " detections above 75% confidence on " + data.date + ".";
+    if (window.BirdNETUI) {
+      preview.innerHTML = BirdNETUI.message(data.row_count ? (warning ? "warning" : "success") : "warning", title, warning || detail);
+    } else {
+      preview.textContent = title + " " + (warning || detail);
+    }
+    if (submit) submit.disabled = data.row_count === 0;
+  } catch (err) {
+    if (window.BirdNETUI) BirdNETUI.setMessage(preview, "error", "Preview unavailable", "The export preview could not be loaded.");
+  }
+}
+
 async function submitID() {
-  var blocation = document.getElementById("blocation").value.trim();
-  var state = document.getElementById("state").value.trim();
-  var country = document.getElementById("country").value.trim();
-  var protocol = document.getElementById("protocol").value;
-  var num_observers = document.getElementById("num_observers").value;
-  var dist_traveled = document.getElementById("dist_traveled").value;
-  var notes = document.getElementById("notes").value;
-  var export_date = document.getElementById("export_date").value;
-
-  if (!blocation || !state || !country || !num_observers || !export_date) {
-      alert("Please fill out all required fields (marked with an asterisk).");
-      return;
-  }
-  
-  if (country.length !== 2) {
-      alert("Country Code must be exactly 2 letters.");
-      return;
-  }
-
-  if (protocol === "traveling" && !dist_traveled) {
-      alert("Distance Traveled is required for the Traveling protocol.");
+  var values = getEbirdFormValues();
+  var validationError = validateEbirdForm(values);
+  if (validationError) {
+      setEbirdMessage("warning", "Missing export details", validationError);
       return;
   }
 
   var checkParams = new URLSearchParams({
       ebird_export_check: "1",
-      date: export_date
+      date: values.export_date
   });
 
   try {
@@ -417,22 +466,24 @@ async function submitID() {
       });
       var checkData = await checkResponse.json();
       if (!checkData.count) {
-          alert("No detections above 75% confidence were found for " + export_date + ". Nothing was exported.");
+          setEbirdMessage("warning", "Nothing to export", "No detections above 75% confidence were found for " + values.export_date + ".");
           return;
       }
   } catch (err) {
       console.error(err);
+      setEbirdMessage("error", "Preview check failed", "The export check could not be completed.");
+      return;
   }
 
   var exportParams = new URLSearchParams({
-      blocation: blocation,
-      state: state,
-      country: country,
-      protocol: protocol,
-      num_observers: num_observers,
-      dist_traveled: dist_traveled,
-      notes: notes,
-      date: export_date
+      blocation: values.blocation,
+      state: values.state,
+      country: values.country,
+      protocol: values.protocol,
+      num_observers: values.num_observers,
+      dist_traveled: values.dist_traveled,
+      notes: values.notes,
+      date: values.export_date
   });
 
   window.location.href = "history.php?" + exportParams.toString();
@@ -440,6 +491,17 @@ async function submitID() {
   document.getElementById('attribution-dialog').innerHTML = "<div class='ebird-dialog-header'>✅ Export Complete</div><div class='ebird-success'><h3>Success!</h3><p>Your checklist will start downloading momentarily.</p><p>Refer to <a target='_blank' href='https://ebird.org/content/eBirdCommon/docs/ebird_import_data_process.pdf'>this guide</a> for information on how to import it in eBird.<br>The checklist file format is: 'eBird Record Format (Extended)'.</p><div class='note'>Only detections with confidence &gt; 75% were included. Entries are limited to 1 per hour per species to comply with eBird guidelines. Always verify your checklist before submitting.</div><button class='ebird-btn-submit' onclick='closeDialog()'>Close</button></div>";
 
 }
+
+["export_date", "blocation", "state", "country", "protocol", "num_observers", "dist_traveled"].forEach(function(id) {
+  var el = document.getElementById(id);
+  if (el) {
+    el.addEventListener("change", refreshEbirdPreview);
+    el.addEventListener("input", function() {
+      var message = document.getElementById("ebird-form-message");
+      if (message) message.innerHTML = "";
+    });
+  }
+});
 
 </script>  
 

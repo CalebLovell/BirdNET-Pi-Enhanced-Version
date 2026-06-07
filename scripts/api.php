@@ -14,7 +14,212 @@ if ($requestMethod !== 'GET') {
 $db = new SQLite3(__ROOT__ . '/scripts/birds.db', SQLITE3_OPEN_READONLY);
 $db->busyTimeout(1000);
 
-if (preg_match('#^/api/v1/image/(\S+)$#', $requestUri, $matches)) {
+function api_json($data, $status = 200) {
+  http_response_code($status);
+  header('Content-Type: application/json');
+  echo json_encode($data);
+}
+
+function api_format_service($service) {
+  $status = trim(shell_exec('systemctl is-active ' . escapeshellarg($service) . ' 2>/dev/null'));
+  if ($status === '') {
+    $status = 'unknown';
+  }
+  return [
+    'name' => $service,
+    'status' => $status,
+    'ok' => $status === 'active'
+  ];
+}
+
+function api_weather_label($code) {
+  $codes = [
+    0 => 'Clear', 1 => 'Mostly clear', 2 => 'Partly cloudy', 3 => 'Overcast',
+    45 => 'Fog', 48 => 'Rime fog', 51 => 'Light drizzle', 53 => 'Moderate drizzle',
+    55 => 'Dense drizzle', 61 => 'Slight rain', 63 => 'Moderate rain', 65 => 'Heavy rain',
+    71 => 'Slight snow', 73 => 'Moderate snow', 75 => 'Heavy snow', 80 => 'Slight showers',
+    81 => 'Moderate showers', 82 => 'Violent showers', 95 => 'Thunderstorm'
+  ];
+  return $codes[$code] ?? 'Cloudy';
+}
+
+function api_ebird_export_count($db, $date, $min_confidence = 0.75) {
+  $stmt = $db->prepare("
+    SELECT COUNT(*) AS row_count, COALESCE(SUM(DetectionCount), 0) AS detection_count
+    FROM (
+      SELECT Com_Name, CAST(substr(Time, 1, 2) AS INTEGER) AS Hour, COUNT(*) AS DetectionCount
+      FROM detections
+      WHERE Date = :date
+        AND Confidence > :min_confidence
+        AND Time IS NOT NULL
+        AND length(Time) >= 2
+      GROUP BY Com_Name, CAST(substr(Time, 1, 2) AS INTEGER)
+    )
+  ");
+  $stmt->bindValue(':date', $date, SQLITE3_TEXT);
+  $stmt->bindValue(':min_confidence', $min_confidence, SQLITE3_FLOAT);
+  $row = $stmt->execute()->fetchArray(SQLITE3_ASSOC);
+  return [
+    'row_count' => (int)($row['row_count'] ?? 0),
+    'detection_count' => (int)($row['detection_count'] ?? 0)
+  ];
+}
+
+if (preg_match('#^/api/v1/system/health$#', $requestUri)) {
+  $home = get_home();
+  $db_path = __ROOT__ . '/scripts/birds.db';
+  $last_detection = $db->querySingle('SELECT Date || " " || Time FROM detections ORDER BY Date DESC, Time DESC LIMIT 1');
+  $weather_count = $db->querySingle("SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='weather'") ? $db->querySingle("SELECT COUNT(*) FROM weather WHERE Date = DATE('now','localtime')") : 0;
+  $disk_total = @disk_total_space($home);
+  $disk_free = @disk_free_space($home);
+
+  api_json([
+    'services' => [
+      'recording' => api_format_service('birdnet_recording.service'),
+      'analysis' => api_format_service('birdnet_analysis.service')
+    ],
+    'disk' => [
+      'total_bytes' => $disk_total ?: 0,
+      'free_bytes' => $disk_free ?: 0,
+      'used_percent' => ($disk_total && $disk_free) ? round((($disk_total - $disk_free) / $disk_total) * 100, 1) : null
+    ],
+    'database' => [
+      'path' => $db_path,
+      'size_bytes' => file_exists($db_path) ? filesize($db_path) : 0
+    ],
+    'last_detection_at' => $last_detection ?: null,
+    'weather_rows_today' => (int)$weather_count,
+    'generated_at' => date('c')
+  ]);
+
+} elseif (preg_match('#^/api/v1/weather/current$#', $requestUri)) {
+  $has_weather = $db->querySingle("SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='weather'") > 0;
+  if (!$has_weather) {
+    api_json(['status' => 'missing', 'message' => 'Weather table has not been created yet.']);
+    exit;
+  }
+
+  $has_is_day = false;
+  $cols = $db->query("PRAGMA table_info(weather)");
+  while ($cols && ($col = $cols->fetchArray(SQLITE3_ASSOC))) {
+    if ($col['name'] === 'IsDay') {
+      $has_is_day = true;
+      break;
+    }
+  }
+
+  $sel = $has_is_day ? 'Date, Hour, Temp, ConditionCode, IsDay' : 'Date, Hour, Temp, ConditionCode';
+  $stmt = $db->prepare("SELECT $sel FROM weather WHERE Date = DATE('now','localtime') AND Hour = :hour AND Temp IS NOT NULL LIMIT 1");
+  $stmt->bindValue(':hour', (int)date('G'), SQLITE3_INTEGER);
+  $current = $stmt->execute()->fetchArray(SQLITE3_ASSOC);
+  $latest = $db->query("SELECT Date, Hour FROM weather WHERE Temp IS NOT NULL ORDER BY Date DESC, Hour DESC LIMIT 1")->fetchArray(SQLITE3_ASSOC);
+  $today_rows = $db->querySingle("SELECT COUNT(*) FROM weather WHERE Date = DATE('now','localtime') AND Temp IS NOT NULL") ?: 0;
+
+  if (!$current) {
+    api_json([
+      'status' => 'missing',
+      'today_rows' => (int)$today_rows,
+      'last_synced_at' => $latest ? $latest['Date'] . ' ' . sprintf('%02d:00', (int)$latest['Hour']) : null,
+      'message' => 'Current-hour weather is missing.'
+    ]);
+    exit;
+  }
+
+  $code = (int)$current['ConditionCode'];
+  api_json([
+    'status' => 'current',
+    'date' => $current['Date'],
+    'hour' => (int)$current['Hour'],
+    'temp' => round((float)$current['Temp']),
+    'condition_code' => $code,
+    'condition' => api_weather_label($code),
+    'is_day' => $has_is_day ? (int)$current['IsDay'] : 1,
+    'today_rows' => (int)$today_rows,
+    'last_synced_at' => $current['Date'] . ' ' . sprintf('%02d:00', (int)$current['Hour']),
+    'generated_at' => date('c')
+  ]);
+
+} elseif (preg_match('#^/api/v1/species/list$#', $requestUri)) {
+  $limit = request_int($_GET, 'limit', 50, 1, 100);
+  $offset = request_int($_GET, 'offset', 0, 0, 1000000);
+  $time_period = isset($_GET['time_period']) ? $_GET['time_period'] : 'all';
+  $sort_by = isset($_GET['sort_by']) ? $_GET['sort_by'] : 'detections';
+  $search = isset($_GET['search']) ? trim($_GET['search']) : '';
+
+  $where_clauses = [];
+  if ($time_period !== 'all') {
+    $periods = ['24h' => '-1 day', '7d' => '-7 days', '30d' => '-30 days', '90d' => '-90 days', '1y' => '-1 year'];
+    if (isset($periods[$time_period])) {
+      $where_clauses[] = "Date >= date('now', '" . $periods[$time_period] . "')";
+    }
+  }
+  if ($search !== '') {
+    $where_clauses[] = "(Com_Name LIKE :search OR Sci_Name LIKE :search)";
+  }
+  $where_sql = !empty($where_clauses) ? 'WHERE ' . implode(' AND ', $where_clauses) : '';
+
+  $order_by = 'COUNT(*) DESC';
+  if ($sort_by === 'sci_name') $order_by = 'Sci_Name ASC';
+  elseif ($sort_by === 'com_name') $order_by = 'Com_Name ASC';
+  elseif ($sort_by === 'confidence') $order_by = 'MAX(Confidence) DESC';
+
+  $count_stmt = $db->prepare("SELECT COUNT(*) AS total FROM (SELECT Sci_Name FROM detections $where_sql GROUP BY Sci_Name)");
+  $list_stmt = $db->prepare("SELECT Com_Name, Sci_Name, COUNT(*) as Count, MAX(Confidence) as MaxConf, MIN(Date) as FirstDate FROM detections $where_sql GROUP BY Sci_Name ORDER BY $order_by LIMIT :limit OFFSET :offset");
+  if ($search !== '') {
+    $count_stmt->bindValue(':search', '%' . $search . '%', SQLITE3_TEXT);
+    $list_stmt->bindValue(':search', '%' . $search . '%', SQLITE3_TEXT);
+  }
+  $list_stmt->bindValue(':limit', $limit, SQLITE3_INTEGER);
+  $list_stmt->bindValue(':offset', $offset, SQLITE3_INTEGER);
+  $total = (int)$count_stmt->execute()->fetchArray(SQLITE3_ASSOC)['total'];
+  $result = $list_stmt->execute();
+  $items = [];
+  while ($row = $result->fetchArray(SQLITE3_ASSOC)) {
+    $info = get_info_url($row['Sci_Name']);
+    $items[] = [
+      'common_name' => $row['Com_Name'],
+      'scientific_name' => $row['Sci_Name'],
+      'detections' => (int)$row['Count'],
+      'max_confidence' => round((float)$row['MaxConf'], 4),
+      'first_detected' => $row['FirstDate'],
+      'info_url' => $info['URL'],
+      'info_title' => $info['TITLE'],
+      'wikipedia_url' => 'https://wikipedia.org/wiki/' . str_replace('%20', '_', rawurlencode($row['Sci_Name']))
+    ];
+  }
+  api_json([
+    'items' => $items,
+    'count' => count($items),
+    'limit' => $limit,
+    'offset' => $offset,
+    'next_offset' => $offset + count($items),
+    'total' => $total,
+    'has_more' => ($offset + count($items)) < $total
+  ]);
+
+} elseif (preg_match('#^/api/v1/exports/ebird/preview$#', $requestUri)) {
+  $date = isset($_GET['date']) && preg_match('/^\d{4}-\d{2}-\d{2}$/', $_GET['date']) ? $_GET['date'] : date('Y-m-d');
+  $counts = api_ebird_export_count($db, $date);
+  $warnings = [];
+  $lat = $config['LATITUDE'] ?? '';
+  $lon = $config['LONGITUDE'] ?? '';
+  if ($counts['row_count'] === 0) {
+    $warnings[] = 'No detections above 75% confidence were found for this date.';
+  }
+  if ($lat === '' || $lon === '' || $lat === '0.000' || $lon === '0.000') {
+    $warnings[] = 'Latitude or longitude is missing from Settings.';
+  }
+  api_json([
+    'date' => $date,
+    'row_count' => $counts['row_count'],
+    'detection_count' => $counts['detection_count'],
+    'latitude' => $lat,
+    'longitude' => $lon,
+    'warnings' => $warnings,
+    'ok' => empty($warnings)
+  ]);
+
+} elseif (preg_match('#^/api/v1/image/(\S+)$#', $requestUri, $matches)) {
   $flickr = new Flickr();
   $wikipedia = new Wikipedia();
   if ($config["IMAGE_PROVIDER"] === 'FLICKR') {
