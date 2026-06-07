@@ -15,6 +15,67 @@ $chart = "Combo-$myDate.png";
 $db = new SQLite3('./scripts/birds.db', SQLITE3_OPEN_READONLY);
 $db->busyTimeout(1000);
 
+function get_overview_weather($db, $date) {
+  $weather = [];
+  $check_table = $db->query("SELECT name FROM sqlite_master WHERE type='table' AND name='weather'");
+  if (!$check_table || !$check_table->fetchArray()) {
+    return $weather;
+  }
+
+  $hasIsDay = false;
+  $cols = $db->query("PRAGMA table_info(weather)");
+  if ($cols) {
+    while($c = $cols->fetchArray()) {
+      if($c['name'] == 'IsDay') {
+        $hasIsDay = true;
+      }
+    }
+  }
+
+  $sel = $hasIsDay ? "Hour, Temp, ConditionCode, IsDay" : "Hour, Temp, ConditionCode";
+  $stmt = $db->prepare("SELECT $sel FROM weather WHERE Date = :date AND Temp IS NOT NULL ORDER BY Hour ASC");
+  if (!$stmt) {
+    return $weather;
+  }
+
+  $stmt->bindValue(':date', $date, SQLITE3_TEXT);
+  $res = $stmt->execute();
+  if (!$res) {
+    return $weather;
+  }
+
+  while ($row = $res->fetchArray(SQLITE3_ASSOC)) {
+    $weather[(int)$row['Hour']] = [
+      'temp' => round((float)$row['Temp']),
+      'code' => (int)$row['ConditionCode'],
+      'is_day' => $hasIsDay ? (int)$row['IsDay'] : 1
+    ];
+  }
+
+  return $weather;
+}
+
+function sync_overview_weather($home, $user) {
+  $python = $home . "/BirdNET-Pi/birdnet/bin/python3";
+  $script = $home . "/BirdNET-Pi/scripts/utils/weather.py";
+  if (!is_readable($script)) {
+    return;
+  }
+
+  $lock = @fopen(sys_get_temp_dir() . '/birdnet_weather_sync.lock', 'c');
+  if (!$lock) {
+    return;
+  }
+
+  if (@flock($lock, LOCK_EX | LOCK_NB)) {
+    $timeout = is_executable('/usr/bin/timeout') ? "/usr/bin/timeout 20 " : "";
+    $cmd = $timeout . "sudo -u " . escapeshellarg($user) . " " . escapeshellarg($python) . " " . escapeshellarg($script) . " >/dev/null 2>&1";
+    @exec($cmd);
+    @flock($lock, LOCK_UN);
+  }
+  @fclose($lock);
+}
+
 if(isset($_GET['custom_image'])){
   if(isset($config["CUSTOM_IMAGE"])) {
   ?>
@@ -119,27 +180,18 @@ if(isset($_GET['ajax_chart_data']) && $_GET['ajax_chart_data'] == "true") {
     $hourly[$name][(int)$row['hour']] = (int)$row['cnt'];
   }
   // Weather breakdown per hour
-  $weather = [];
-  $check_table = $db->query("SELECT name FROM sqlite_master WHERE type='table' AND name='weather'");
-  if ($check_table && $check_table->fetchArray()) {
-      $hasIsDay = false;
-      $cols = $db->query("PRAGMA table_info(weather)");
-      while($c = $cols->fetchArray()) { if($c['name'] == 'IsDay') $hasIsDay = true; }
-      $sel = $hasIsDay ? "Hour, Temp, ConditionCode, IsDay" : "Hour, Temp, ConditionCode";
-      $stmt3 = $db->prepare("SELECT $sel FROM weather WHERE Date = DATE('now','localtime') AND Temp IS NOT NULL ORDER BY Hour ASC");
-      if ($stmt3) {
-          $res3 = $stmt3->execute();
-          while ($row = $res3->fetchArray(SQLITE3_ASSOC)) {
-              $weather[(int)$row['Hour']] = [
-                  'temp' => round((float)$row['Temp']),
-                  'code' => (int)$row['ConditionCode'],
-                  'is_day' => $hasIsDay ? (int)$row['IsDay'] : 1
-              ];
-          }
-      }
+  $today = date('Y-m-d');
+  $currentHour = (int)date('G');
+  $weather = get_overview_weather($db, $today);
+  if (empty($weather) || !isset($weather[$currentHour])) {
+      $db->close();
+      sync_overview_weather($home, get_user());
+      $db = new SQLite3('./scripts/birds.db', SQLITE3_OPEN_READONLY);
+      $db->busyTimeout(1000);
+      $weather = get_overview_weather($db, $today);
   }
 
-  echo json_encode(['species' => $species, 'hourly' => $hourly, 'weather' => $weather, 'currentHour' => (int)date('G')]);
+  echo json_encode(['species' => $species, 'hourly' => $hourly, 'weather' => $weather, 'currentHour' => $currentHour]);
   die();
 }
 
