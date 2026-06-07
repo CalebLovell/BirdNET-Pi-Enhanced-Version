@@ -384,7 +384,7 @@ elseif ($config["LONGITUDE"] == "0.000") {
       $feed_db->close();
     } catch(Exception $e) {}
   ?>
-    <h3 style="display:flex; align-items:center; width:100%;"><span class="live-dot"></span> Live Activity <span id="liveFeedUpdated" class="ui-meta" style="margin-left:8px;"></span><?php echo $current_weather_str ?: "<span id='liveFeedWeather' style='margin-left:auto; font-size:0.9em; font-weight:normal; color:var(--text-secondary, #6b7280);'></span>"; ?></h3>
+    <h3 style="display:flex; align-items:center; width:100%;"><span class="live-dot"></span> Live Activity <?php echo $current_weather_str ?: "<span id='liveFeedWeather' style='margin-left:auto; font-size:0.9em; font-weight:normal; color:var(--text-secondary, #6b7280);'></span>"; ?></h3>
     <ul class="feed-list" id="liveFeedList">
       <li style="padding:12px 0; text-align:center; color: var(--text-secondary, #6b7280);">Loading...</li>
     </ul>
@@ -431,8 +431,6 @@ elseif ($config["LONGITUDE"] == "0.000") {
       .then(data => {
         const list = document.getElementById('liveFeedList');
         if (!list) return;
-        const updated = document.getElementById('liveFeedUpdated');
-        if (updated) updated.textContent = 'Updated ' + new Date().toLocaleTimeString([], {hour: 'numeric', minute: '2-digit'});
         if (!data || data.length === 0) {
           list.innerHTML = '<li style="padding:12px 0; text-align:center; color: var(--text-secondary, #6b7280);">No detections today yet.</li>';
           return;
