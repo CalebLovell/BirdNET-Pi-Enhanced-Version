@@ -1084,10 +1084,7 @@ $db->close();
 
     <!-- Seasonal Presence -->
     <section class="insights-section" style="margin-top: 30px;">
-        <div class="insights-section-title">🗓️ Seasonal Presence <span class="info-btn">ⓘ<span class="info-tooltip" style="width: 340px;"><strong>Classification Guide:</strong><br>• <strong>Year-round:</strong> Detected across 9+ months<br>• <strong>Seasonal:</strong> Detected across 3-8 months<br>• <strong>Transient:</strong> Detected &lt;3 months<br><br><strong>Data Accuracy Disclaimer:</strong><br>These classifications may be inaccurate if the station has been running for less than a full year, as it lacks seasonal historical context.<br><br>Bar <strong>height</strong> is expected frequency. <strong>Purple highlights</strong> are actual detections.</span></span></div>
-        <?php if(count($seasonal_top) >= $seasonal_species_limit): ?>
-        <div style="font-size: 0.85em; color: var(--text-muted); margin: -4px 0 12px;">Showing the top <?php echo number_format($seasonal_species_limit); ?> detected species by lifetime detections to keep this page responsive.</div>
-        <?php endif; ?>
+        <div class="insights-section-title">🗓️ Seasonal Presence <span class="info-btn">ⓘ<span class="info-tooltip" style="width: 340px;"><strong>Classification Guide:</strong><br>• <strong>Year-round:</strong> Detected across 9+ months<br>• <strong>Seasonal:</strong> Detected across 3-8 months<br>• <strong>Transient:</strong> Detected &lt;3 months<br><br><strong>Data Accuracy Disclaimer:</strong><br>These classifications may be inaccurate if the station has been running for less than a full year, as it lacks seasonal historical context.<br><br>Bar <strong>height</strong> is expected frequency. <strong>Purple highlights</strong> are actual detections.</span></span><?php if(count($seasonal_top) >= $seasonal_species_limit): ?> <span style="font-size: 0.85em; font-weight: 500; color: var(--text-muted);">(Showing the top <?php echo number_format($seasonal_species_limit); ?> detected species by lifetime detections to keep this page responsive.)</span><?php endif; ?></div>
         <div class="insights-stats-list">
             <?php if(empty($seasonal_top)): ?>
             <div class="insights-stats-item">
