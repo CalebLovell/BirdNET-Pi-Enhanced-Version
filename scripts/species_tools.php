@@ -70,10 +70,10 @@ function collect_species_targets(SQLite3 $db, string $species, string $home, $ba
   $stmt = $db->prepare('SELECT Date, Com_Name, Sci_Name, File_Name FROM detections WHERE Sci_Name = :name');
   ensure_db_ok($stmt);
   $stmt->bindValue(':name', $species, SQLITE3_TEXT);
-  $res = $stmt->execute();
+  $res = db_execute_safe($db, $stmt, 'species tools collect targets');
 
   $count = 0; $files = []; $dirs = []; $sci = null;
-  while ($row = $res->fetchArray(SQLITE3_ASSOC)) {
+  while ($row = db_fetch_assoc_safe($res)) {
     $count++; if ($sci === null) $sci = $row['Sci_Name'];
     $dir = str_replace([' ', "'"], ['_', ''], $row['Com_Name']);
     $candidates = [
@@ -145,7 +145,7 @@ if (isset($_GET['delete'])) {
   $del = $db->prepare('DELETE FROM detections WHERE Sci_Name = :name');
   ensure_db_ok($del);
   $del->bindValue(':name', $species, SQLITE3_TEXT);
-  $del->execute();
+  db_execute_safe($db, $del, 'species tools delete detections');
   $lines_deleted = $db->changes();
 
   if ($info['sci'] !== null && file_exists($confirm_file)) {
@@ -163,7 +163,7 @@ SELECT Com_Name, Sci_Name, COUNT(*) AS Count, MAX(Confidence) AS MaxConfidence, 
 FROM detections
 GROUP BY Sci_Name;
 SQL;
-$result = $db->query($sql);
+$result = db_query_safe($db, $sql, 'species tools species aggregates');
 ?>
 <style>
   .circle-icon{display:inline-block;width:12px;height:12px;border:1px solid #777;border-radius:50%;cursor:pointer;}
@@ -203,7 +203,7 @@ $result = $db->query($sql);
       </tr>
     </thead>
     <tbody>
-<?php while ($row = $result->fetchArray(SQLITE3_ASSOC)) {
+<?php while ($row = db_fetch_assoc_safe($result)) {
   $common = $row['Com_Name'];
   $scient = $row['Sci_Name'];
   $count  = (int)$row['Count'];

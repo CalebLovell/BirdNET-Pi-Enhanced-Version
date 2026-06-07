@@ -118,14 +118,14 @@ if(isset($_GET['legacy']) && $_GET['legacy'] == "true") {
 }
 ?>
 
-window.onload = function(){
+window.addEventListener('load', function(){
   var playersrc =  document.getElementById('playersrc');
   playersrc.onerror = function() {
     console.warn("Live stream source reported an error; keeping the live spectrogram view active.");
     var fallbackPlayer = document.getElementById('player');
     if (fallbackPlayer) fallbackPlayer.style.display = 'block';
     var loading = document.getElementById('loading-h1');
-    if (loading) loading.textContent = 'Waiting for live stream...';
+    if (loading) loading.textContent = 'Live stream unavailable. Check livestream.service and press play to retry.';
   };
 
   // if user agent includes iPhone or Mac use legacy mode
@@ -133,7 +133,8 @@ window.onload = function(){
     document.getElementById("spectrogramimage").style.display="";
     document.body.querySelector('canvas').remove();
     document.getElementById('player').remove();
-    document.body.querySelector('h1').remove();
+    var loadingHeader = document.getElementById('loading-h1');
+    if (loadingHeader) loadingHeader.remove();
     document.getElementsByClassName("centered")[0].remove()
 
     <?php 
@@ -168,18 +169,32 @@ window.onload = function(){
   } else {
     player = document.getElementById('player');
     player.style.display = 'block'; // Unhide fallback player so user can click to start
-    player.oncanplay = function() {
+    var startSpectrogram = function() {
       if (started) return;
-        started = true;
-        initialize();
+      started = true;
+      initialize();
     };
+    player.addEventListener('canplay', startSpectrogram);
+    player.addEventListener('loadeddata', startSpectrogram);
+    player.addEventListener('playing', startSpectrogram);
+    player.addEventListener('play', function() {
+      startSpectrogram();
+      if (ACTX && ACTX.state === 'suspended') ACTX.resume();
+    });
+    player.addEventListener('error', function() {
+      var loading = document.getElementById('loading-h1');
+      if (loading) loading.textContent = 'Live stream unavailable. Check livestream.service and press play to retry.';
+    });
+    player.load();
+    player.play().then(startSpectrogram).catch(function(e) {
+      var loading = document.getElementById('loading-h1');
+      if (loading) loading.textContent = 'Press play to start live spectrogram';
+      console.log("Autoplay blocked. Tap the player to listen:", e);
+    });
   }
-  player.play().catch(function(e) {
-    console.log("Autoplay blocked. Tap the player to listen:", e);
-  });
   
   }
-};
+});
 
 function fitTextOnCanvas(text,fontface,yPosition){    
     var fontsize=300;
@@ -320,7 +335,8 @@ function toggleFreqshift(state) {
 }
 
 function initialize() {
-  document.body.querySelector('h1').remove();
+  var loadingHeader = document.getElementById('loading-h1');
+  if (loadingHeader) loadingHeader.remove();
   const CVS = document.body.querySelector('canvas');
   CTX = CVS.getContext('2d');
   const W = CVS.width = window.innerWidth;

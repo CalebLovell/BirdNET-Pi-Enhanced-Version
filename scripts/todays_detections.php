@@ -45,11 +45,11 @@ $stmt = $db->prepare('SELECT Date, COUNT(*) AS Detections FROM detections WHERE 
 $stmt->bindValue(':com_name', $birdName);
 
 // Execute the SQL statement and get the result set
-$result = $stmt->execute();
+$result = db_execute_safe($db, $stmt, 'today detections species chart');
 
 // Fetch the result set as an associative array
 $data = array();
-while ($row = $result->fetchArray(SQLITE3_ASSOC)) {
+while ($row = db_fetch_assoc_safe($result)) {
   $data[$row['Date']] = $row['Detections'];
 }
 
@@ -160,7 +160,7 @@ if(isset($_GET['ajax_detections']) && $_GET['ajax_detections'] == "true"  ) {
   if ($search_value !== null) {
     $statement0->bindValue(':searchterm', $search_value, SQLITE3_TEXT);
   }
-  $result0 = $statement0->execute();
+  $result0 = db_execute_safe($db, $statement0, 'today detections ajax list');
 
   ?> <table>
    <?php
@@ -171,7 +171,7 @@ if(isset($_GET['ajax_detections']) && $_GET['ajax_detections'] == "true"  ) {
   $iterations = 0;
   $image_provider = null;
 
-  while($todaytable=$result0->fetchArray(SQLITE3_ASSOC))
+  while($todaytable = db_fetch_assoc_safe($result0))
   {
     $iterations++;
 

@@ -24,8 +24,8 @@ $db->busyTimeout(1000);
 $statement1 = $db->prepare("SELECT COUNT(*) FROM detections WHERE Date == :date");
 ensure_db_ok($statement1);
 $statement1->bindValue(':date', $theDate, SQLITE3_TEXT);
-$result1 = $statement1->execute();
-$totalcount = $result1->fetchArray(SQLITE3_ASSOC);
+$result1 = db_execute_safe($db, $statement1, 'history total detections');
+$totalcount = db_fetch_assoc_safe($result1) ?: ['COUNT(*)' => 0];
 
 function get_ebird_export_rows($db, $date, $min_confidence = 0.75) {
 	$rows = [];
@@ -44,8 +44,8 @@ function get_ebird_export_rows($db, $date, $min_confidence = 0.75) {
 	ensure_db_ok($statement);
 	$statement->bindValue(':date', $date, SQLITE3_TEXT);
 	$statement->bindValue(':min_confidence', $min_confidence, SQLITE3_FLOAT);
-	$result = $statement->execute();
-	while($row = $result->fetchArray(SQLITE3_ASSOC)) {
+	$result = db_execute_safe($db, $statement, 'history ebird export rows');
+	while($row = db_fetch_assoc_safe($result)) {
 		$rows[] = $row;
 	}
 	return $rows;

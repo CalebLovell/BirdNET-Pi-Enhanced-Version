@@ -37,7 +37,7 @@ $kpi_stmt = $db->prepare("SELECT COUNT(DISTINCT Sci_Name) as unique_species, COU
 if (!empty($search)) {
     $kpi_stmt->bindValue(':search', '%' . $search . '%', SQLITE3_TEXT);
 }
-$kpi_res = $kpi_stmt->execute()->fetchArray(SQLITE3_ASSOC);
+$kpi_res = db_fetch_assoc_safe(db_execute_safe($db, $kpi_stmt, 'species kpis')) ?: [];
 
 // Species List Data
 $order_by = "COUNT(*) DESC";
@@ -51,7 +51,8 @@ $count_stmt = $db->prepare("SELECT COUNT(*) AS total FROM (SELECT Sci_Name FROM 
 if (!empty($search)) {
     $count_stmt->bindValue(':search', '%' . $search . '%', SQLITE3_TEXT);
 }
-$species_total = (int)$count_stmt->execute()->fetchArray(SQLITE3_ASSOC)['total'];
+$species_total_row = db_fetch_assoc_safe(db_execute_safe($db, $count_stmt, 'species count'));
+$species_total = (int)($species_total_row['total'] ?? 0);
 
 $list_sql = "SELECT Com_Name, Sci_Name, COUNT(*) as Count, MAX(Confidence) as MaxConf, MIN(Date) as FirstDate, File_Name FROM detections $where_sql GROUP BY Sci_Name ORDER BY $order_by";
 if (!$is_csv_export) {
@@ -65,10 +66,10 @@ if (!$is_csv_export) {
     $list_stmt->bindValue(':limit', $species_page_size, SQLITE3_INTEGER);
     $list_stmt->bindValue(':offset', $species_offset, SQLITE3_INTEGER);
 }
-$list_res = $list_stmt->execute();
+$list_res = db_execute_safe($db, $list_stmt, 'species list');
 
 $species_list = [];
-while ($row = $list_res->fetchArray(SQLITE3_ASSOC)) {
+while ($row = db_fetch_assoc_safe($list_res)) {
     $species_list[] = $row;
 }
 

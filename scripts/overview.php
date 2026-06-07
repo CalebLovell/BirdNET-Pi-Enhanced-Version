@@ -17,15 +17,15 @@ $db->busyTimeout(1000);
 
 function get_overview_weather($db, $date) {
   $weather = [];
-  $check_table = $db->query("SELECT name FROM sqlite_master WHERE type='table' AND name='weather'");
-  if (!$check_table || !$check_table->fetchArray()) {
+  $check_table = db_query_safe($db, "SELECT name FROM sqlite_master WHERE type='table' AND name='weather'", 'overview weather table check');
+  if (!db_fetch_assoc_safe($check_table)) {
     return $weather;
   }
 
   $hasIsDay = false;
-  $cols = $db->query("PRAGMA table_info(weather)");
+  $cols = db_query_safe($db, "PRAGMA table_info(weather)", 'overview weather table info');
   if ($cols) {
-    while($c = $cols->fetchArray()) {
+    while($c = db_fetch_assoc_safe($cols)) {
       if($c['name'] == 'IsDay') {
         $hasIsDay = true;
       }
@@ -39,12 +39,12 @@ function get_overview_weather($db, $date) {
   }
 
   $stmt->bindValue(':date', $date, SQLITE3_TEXT);
-  $res = $stmt->execute();
+  $res = db_execute_safe($db, $stmt, 'overview weather rows');
   if (!$res) {
     return $weather;
   }
 
-  while ($row = $res->fetchArray(SQLITE3_ASSOC)) {
+  while ($row = db_fetch_assoc_safe($res)) {
     $weather[(int)$row['Hour']] = [
       'temp' => round((float)$row['Temp']),
       'code' => (int)$row['ConditionCode'],
@@ -119,7 +119,7 @@ if(isset($_GET['ajax_chart_data']) && $_GET['ajax_chart_data'] == "true") {
   // Species aggregate: name, count, max confidence
   $stmt1 = $db->prepare("SELECT Com_Name, Sci_Name, COUNT(*) as cnt, MAX(Confidence) as maxConf FROM detections WHERE Date = DATE('now','localtime') GROUP BY Sci_Name ORDER BY cnt DESC");
   ensure_db_ok($stmt1);
-  $res1 = $stmt1->execute();
+  $res1 = db_execute_safe($db, $stmt1, 'overview chart species');
     // For image fetching
     $image_provider = null;
     $fallback_provider = null;
@@ -136,7 +136,7 @@ if(isset($_GET['ajax_chart_data']) && $_GET['ajax_chart_data'] == "true") {
     }
 
     $species = [];
-    while ($row = $res1->fetchArray(SQLITE3_ASSOC)) {
+    while ($row = db_fetch_assoc_safe($res1)) {
       $img_url = "";
       if ($image_provider) {
         if (!isset($_SESSION['species_portal_v12_cache'])) {
@@ -172,9 +172,9 @@ if(isset($_GET['ajax_chart_data']) && $_GET['ajax_chart_data'] == "true") {
   // Hourly breakdown per species
   $stmt2 = $db->prepare("SELECT Com_Name, CAST(strftime('%H', Time) AS INTEGER) as hour, COUNT(*) as cnt FROM detections WHERE Date = DATE('now','localtime') GROUP BY Com_Name, hour");
   ensure_db_ok($stmt2);
-  $res2 = $stmt2->execute();
+  $res2 = db_execute_safe($db, $stmt2, 'overview chart hourly');
   $hourly = [];
-  while ($row = $res2->fetchArray(SQLITE3_ASSOC)) {
+  while ($row = db_fetch_assoc_safe($res2)) {
     $name = $row['Com_Name'];
     if (!isset($hourly[$name])) $hourly[$name] = [];
     $hourly[$name][(int)$row['hour']] = (int)$row['cnt'];
@@ -201,7 +201,7 @@ if(isset($_GET['ajax_new_species_details']) && $_GET['ajax_new_species_details']
   // Specific query for New Species Today
   $stmt = $db->prepare("SELECT Com_Name, Sci_Name FROM detections WHERE Date = DATE('now', 'localtime') AND Sci_Name NOT IN (SELECT DISTINCT Sci_Name FROM detections WHERE Date < DATE('now', 'localtime')) GROUP BY Sci_Name ORDER BY Com_Name ASC");
   ensure_db_ok($stmt);
-  $res = $stmt->execute();
+  $res = db_execute_safe($db, $stmt, 'overview new species details');
 
   $image_provider = null;
   $fallback_provider = null;
@@ -218,7 +218,7 @@ if(isset($_GET['ajax_new_species_details']) && $_GET['ajax_new_species_details']
   }
 
   $details = [];
-  while ($row = $res->fetchArray(SQLITE3_ASSOC)) {
+  while ($row = db_fetch_assoc_safe($res)) {
     $img_url = "";
     if ($image_provider) {
       if (!isset($_SESSION['species_portal_v12_cache'])) {
@@ -255,7 +255,7 @@ if(isset($_GET['ajax_detections']) && $_GET['ajax_detections'] == "true" && isse
 
   $statement4 = $db->prepare('SELECT Com_Name, Sci_Name, Date, Time, Confidence, File_Name FROM detections ORDER BY Date DESC, Time DESC LIMIT 15');
   ensure_db_ok($statement4);
-  $result4 = $statement4->execute();
+  $result4 = db_execute_safe($db, $statement4, 'overview recent detections');
   if(!isset($_SESSION['images'])) {
     $_SESSION['images'] = [];
   }
@@ -263,7 +263,7 @@ if(isset($_GET['ajax_detections']) && $_GET['ajax_detections'] == "true" && isse
   $image_provider = null;
 
   // hopefully one of the 5 most recent detections has an image that is valid, we'll use that one as the most recent detection until the newer ones get their images created
-  while($mostrecent = $result4->fetchArray(SQLITE3_ASSOC)) {
+  while($mostrecent = db_fetch_assoc_safe($result4)) {
     $comname = preg_replace('/ /', '_', $mostrecent['Com_Name']);
     $sciname = preg_replace('/ /', '_', $mostrecent['Sci_Name']);
     $comnamegraph = str_replace("'", "\'", $mostrecent['Com_Name']);
@@ -429,8 +429,8 @@ if(isset($_GET['ajax_detections']) && $_GET['ajax_detections'] == "true" && isse
   if($iterations == 0) {
     $statement2 = $db->prepare('SELECT COUNT(*) FROM detections WHERE Date == DATE(\'now\', \'localtime\')');
     ensure_db_ok($statement2);
-    $result2 = $statement2->execute();
-    $todaycount = $result2->fetchArray(SQLITE3_ASSOC);
+    $result2 = db_execute_safe($db, $statement2, 'overview today count');
+    $todaycount = db_fetch_assoc_safe($result2) ?: ['COUNT(*)' => 0];
     if($todaycount['COUNT(*)'] > 0) {
       echo "<h3>Your system is currently processing a backlog of audio. This can take several hours before normal functionality of your BirdNET-Pi resumes.</h3>";
     } else {

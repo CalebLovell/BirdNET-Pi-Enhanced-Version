@@ -35,6 +35,76 @@ function ensure_db_ok($sql_stmt) {
   }
 }
 
+function db_log_error($db, $context, $sql = '') {
+  $message = 'BirdNET-Pi database query failed';
+  if ($context !== '') {
+    $message .= ' [' . $context . ']';
+  }
+  if ($db instanceof SQLite3) {
+    $message .= ': ' . $db->lastErrorMsg();
+  }
+  if ($sql !== '') {
+    $message .= ' SQL: ' . $sql;
+  }
+  error_log($message);
+}
+
+function db_query_safe($db, $sql, $context = '') {
+  $result = $db->query($sql);
+  if ($result === false) {
+    db_log_error($db, $context, $sql);
+    return false;
+  }
+  return $result;
+}
+
+function db_execute_safe($db, $stmt, $context = '') {
+  if ($stmt === false) {
+    db_log_error($db, $context);
+    return false;
+  }
+  $result = $stmt->execute();
+  if ($result === false) {
+    db_log_error($db, $context);
+    return false;
+  }
+  return $result;
+}
+
+function db_fetch_assoc_safe($result) {
+  if ($result === false || $result === null) {
+    return null;
+  }
+  $row = $result->fetchArray(SQLITE3_ASSOC);
+  return $row === false ? null : $row;
+}
+
+function db_query_all_safe($db, $sql, $context = '') {
+  $rows = [];
+  $result = db_query_safe($db, $sql, $context);
+  if ($result === false) {
+    return $rows;
+  }
+  while ($row = db_fetch_assoc_safe($result)) {
+    $rows[] = $row;
+  }
+  return $rows;
+}
+
+function db_query_one_safe($db, $sql, $context = '') {
+  $result = db_query_safe($db, $sql, $context);
+  return db_fetch_assoc_safe($result);
+}
+
+function db_query_single_safe($db, $sql, $default = null, $context = '') {
+  $value = $db->querySingle($sql);
+  if ($value === false && $db->lastErrorCode() !== 0) {
+    db_log_error($db, $context, $sql);
+    return $default;
+  }
+  return $value === null ? $default : $value;
+}
+
 function set_timezone() {
   if (!isset($_SESSION['my_timezone'])) {
     $_SESSION['my_timezone'] = trim(shell_exec('timedatectl show --value --property=Timezone'));
@@ -189,7 +259,7 @@ function fetch_species_array($sort_by, $date=null) {
   if (isset($date)) {
     $statement->bindValue(':date', $date, SQLITE3_TEXT);
   }
-  $result = $statement->execute();
+  $result = db_execute_safe($db, $statement, 'fetch_species_array');
   return $result;
 }
 
@@ -198,7 +268,7 @@ function fetch_best_detection($com_name) {
   $statement = $db->prepare("SELECT Com_Name, Sci_Name, COUNT(*), MAX(Confidence), File_Name, Date, Time from detections WHERE Com_Name = :com_name");
   ensure_db_ok($statement);
   $statement->bindValue(':com_name', $com_name, SQLITE3_TEXT);
-  $result = $statement->execute();
+  $result = db_execute_safe($db, $statement, 'fetch_best_detection');
   return $result;
 }
 
@@ -219,47 +289,19 @@ function fetch_all_detections($sci_name, $sort_by, $date=null) {
   if (isset($date)) {
     $statement->bindValue(':date', $date, SQLITE3_TEXT);
   }
-  $result = $statement->execute();
+  $result = db_execute_safe($db, $statement, 'fetch_all_detections');
   return $result;
 }
 
 function get_summary() {
   $db = get_db();
-  $statement = $db->prepare('SELECT COUNT(*) FROM detections');
-  ensure_db_ok($statement);
-  $result = $statement->execute();
-  $totalcount = $result->fetchArray(SQLITE3_ASSOC);
-
-  $statement2 = $db->prepare('SELECT COUNT(*) FROM detections WHERE Date == DATE(\'now\', \'localtime\')');
-  ensure_db_ok($statement2);
-  $result2 = $statement2->execute();
-  $todaycount = $result2->fetchArray(SQLITE3_ASSOC);
-
-  $statement3 = $db->prepare('SELECT COUNT(*) FROM detections WHERE Date == Date(\'now\', \'localtime\') AND TIME >= TIME(\'now\', \'localtime\', \'-1 hour\')');
-  ensure_db_ok($statement3);
-  $result3 = $statement3->execute();
-  $hourcount = $result3->fetchArray(SQLITE3_ASSOC);
-
-  $statement5 = $db->prepare('SELECT COUNT(DISTINCT(Sci_Name)) FROM detections WHERE Date == Date(\'now\',\'localtime\')');
-  ensure_db_ok($statement5);
-  $result5 = $statement5->execute();
-  $todayspeciestally = $result5->fetchArray(SQLITE3_ASSOC);
-
-  $statement6 = $db->prepare('SELECT COUNT(DISTINCT(Sci_Name)) FROM detections');
-  ensure_db_ok($statement6);
-  $result6 = $statement6->execute();
-  $totalspeciestally = $result6->fetchArray(SQLITE3_ASSOC);
-
-  $statement7 = $db->prepare('SELECT Com_Name, COUNT(*) as cnt FROM detections WHERE Date == Date(\'now\',\'localtime\') GROUP BY Sci_Name ORDER BY cnt DESC LIMIT 1');
-  ensure_db_ok($statement7);
-  $result7 = $statement7->execute();
-  $topspeciesrow = $result7->fetchArray(SQLITE3_ASSOC);
-
-  // New Species Today: Species detected today that have NO detections on any previous date
-  $statement8 = $db->prepare("SELECT COUNT(DISTINCT Sci_Name) FROM detections WHERE Date = DATE('now', 'localtime') AND Sci_Name NOT IN (SELECT DISTINCT Sci_Name FROM detections WHERE Date < DATE('now', 'localtime'))");
-  ensure_db_ok($statement8);
-  $result8 = $statement8->execute();
-  $newspeciestally = $result8->fetchArray(SQLITE3_ASSOC);
+  $totalcount = db_query_one_safe($db, 'SELECT COUNT(*) FROM detections', 'summary total detections') ?: ['COUNT(*)' => 0];
+  $todaycount = db_query_one_safe($db, 'SELECT COUNT(*) FROM detections WHERE Date == DATE(\'now\', \'localtime\')', 'summary today detections') ?: ['COUNT(*)' => 0];
+  $hourcount = db_query_one_safe($db, 'SELECT COUNT(*) FROM detections WHERE Date == Date(\'now\', \'localtime\') AND TIME >= TIME(\'now\', \'localtime\', \'-1 hour\')', 'summary last hour detections') ?: ['COUNT(*)' => 0];
+  $todayspeciestally = db_query_one_safe($db, 'SELECT COUNT(DISTINCT(Sci_Name)) FROM detections WHERE Date == Date(\'now\',\'localtime\')', 'summary species today') ?: ['COUNT(DISTINCT(Sci_Name))' => 0];
+  $totalspeciestally = db_query_one_safe($db, 'SELECT COUNT(DISTINCT(Sci_Name)) FROM detections', 'summary total species') ?: ['COUNT(DISTINCT(Sci_Name))' => 0];
+  $topspeciesrow = db_query_one_safe($db, 'SELECT Com_Name, COUNT(*) as cnt FROM detections WHERE Date == Date(\'now\',\'localtime\') GROUP BY Sci_Name ORDER BY cnt DESC LIMIT 1', 'summary top species');
+  $newspeciestally = db_query_one_safe($db, "SELECT COUNT(DISTINCT Sci_Name) FROM detections WHERE Date = DATE('now', 'localtime') AND Sci_Name NOT IN (SELECT DISTINCT Sci_Name FROM detections WHERE Date < DATE('now', 'localtime'))", 'summary new species') ?: ['COUNT(DISTINCT Sci_Name)' => 0];
 
   $ret = [
     'totalcount' => $totalcount['COUNT(*)'],
@@ -364,10 +406,13 @@ class ImageProvider {
 
   protected function get_image_from_db($sci_name) {
     $statement0 = $this->db->prepare('SELECT sci_name, com_en_name, image_url, title, id, author_url, license_url, date_created FROM images WHERE sci_name == :sci_name');
+    if ($statement0 === false) {
+      db_log_error($this->db, 'image cache lookup prepare');
+      return false;
+    }
     $statement0->bindValue(':sci_name', $sci_name);
-    $result = $statement0->execute();
-    $row = $result->fetchArray(SQLITE3_ASSOC);
-    return $row;
+    $result = db_execute_safe($this->db, $statement0, 'image cache lookup');
+    return db_fetch_assoc_safe($result) ?: false;
   }
 
   protected function set_image_in_db($sci_name, $com_en_name, $image_url, $title, $id, $author_url, $license_url) {
@@ -509,18 +554,16 @@ class Flickr extends ImageProvider {
 
   public function get_uid_from_db() {
     $statement0 = $this->db->prepare('SELECT email, uid, date_created FROM source');
-    $result = $statement0->execute();
-    $row = $result->fetchArray(SQLITE3_ASSOC);
-    return $row;
+    $result = db_execute_safe($this->db, $statement0, 'flickr uid lookup');
+    return db_fetch_assoc_safe($result) ?: ['email' => '', 'uid' => '', 'date_created' => ''];
   }
 
   private function set_uid_in_db($uid) {
     $statement0 = $this->db->prepare("INSERT OR REPLACE INTO source VALUES (1, :email, :uid, DATE(\"now\"))");
     $statement0->bindValue(':email', $this->flickr_email);
     $statement0->bindValue(':uid', $uid);
-    $result = $statement0->execute();
-    $row = $result->fetchArray(SQLITE3_ASSOC);
-    return $row;
+    db_execute_safe($this->db, $statement0, 'flickr uid save');
+    return true;
   }
 
   private function get_uid_from_flickr() {

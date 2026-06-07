@@ -153,7 +153,7 @@ if (get_included_files()[0] === __FILE__) {
   $birds = array();
   $values = array();
 
-  while($results=$result->fetchArray(SQLITE3_ASSOC))
+  while($results=db_fetch_assoc_safe($result))
   {
     $comname = preg_replace('/ /', '_', $results['Com_Name']);
     $comname = preg_replace('/\'/', '', $comname);
@@ -220,8 +220,8 @@ function setModalText(iter, title, text, authorlink) {
   $species = $_GET['species'];
   $iter=0;
   $config = get_config();
-  $result3 = fetch_best_detection(htmlspecialchars_decode($_GET['species'], ENT_QUOTES));
-while($results=$result3->fetchArray(SQLITE3_ASSOC)){
+$result3 = fetch_best_detection(htmlspecialchars_decode($_GET['species'], ENT_QUOTES));
+while($results=db_fetch_assoc_safe($result3)){
   $count = $results['COUNT(*)'];
   $maxconf = round((float)round($results['MAX(Confidence)'],2) * 100 ) . '%';
   $date = $results['Date'];
@@ -244,10 +244,10 @@ while($results=$result3->fetchArray(SQLITE3_ASSOC)){
   $db->busyTimeout(1000);
   $stmt = $db->prepare('SELECT Confidence FROM detections WHERE Com_Name = :com_name');
   $stmt->bindValue(':com_name', htmlspecialchars_decode($species, ENT_QUOTES));
-  $conf_result = $stmt->execute();
+  $conf_result = db_execute_safe($db, $stmt, 'stats confidence distribution');
   
   $conf_bins = ["0.7-0.75" => 0, "0.75-0.8" => 0, "0.8-0.85" => 0, "0.85-0.9" => 0, "0.9-0.95" => 0, "0.95-1.0" => 0];
-  while ($row = $conf_result->fetchArray(SQLITE3_ASSOC)) {
+  while ($row = db_fetch_assoc_safe($conf_result)) {
       $conf = $row['Confidence'];
       if ($conf >= 0.95) $conf_bins["0.95-1.0"]++;
       elseif ($conf >= 0.9) $conf_bins["0.9-0.95"]++;
@@ -259,9 +259,9 @@ while($results=$result3->fetchArray(SQLITE3_ASSOC)){
   
   $stmt = $db->prepare('SELECT strftime("%m", Date) as Month, COUNT(*) as Count FROM detections WHERE Com_Name = :com_name GROUP BY Month ORDER BY Month ASC');
   $stmt->bindValue(':com_name', htmlspecialchars_decode($species, ENT_QUOTES));
-  $seasonal_result = $stmt->execute();
+  $seasonal_result = db_execute_safe($db, $stmt, 'stats seasonal distribution');
   $seasonal_data = array_fill(1, 12, 0);
-  while ($row = $seasonal_result->fetchArray(SQLITE3_ASSOC)) {
+  while ($row = db_fetch_assoc_safe($seasonal_result)) {
       $seasonal_data[intval($row['Month'])] = $row['Count'];
   }
   $db->close();
@@ -369,7 +369,7 @@ while($results=$result3->fetchArray(SQLITE3_ASSOC)){
     <table>
 <?php
 $excludelines = [];
-while($results=$result->fetchArray(SQLITE3_ASSOC))
+while($results=db_fetch_assoc_safe($result))
 {
 $comname = preg_replace('/ /', '_', $results['Com_Name']);
 $comname = preg_replace('/\'/', '', $comname);

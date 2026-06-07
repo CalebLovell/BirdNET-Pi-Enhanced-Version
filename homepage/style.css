@@ -311,6 +311,13 @@ textarea:focus-visible {
   pointer-events: none;
   transform: translateY(4px);
   transition: opacity 0.15s ease, transform 0.15s ease;
+  overflow-wrap: break-word;
+  white-space: normal;
+}
+
+.ui-health-item:last-child[data-tooltip]::after {
+  left: auto;
+  right: 10px;
 }
 
 .ui-health-item[data-tooltip]:hover::after,

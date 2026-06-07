@@ -82,10 +82,10 @@ $stmt1 = $db->prepare('SELECT Sci_Name, Com_Name, COUNT(*) as cnt FROM detection
 $stmt1->bindValue(':start', $start_str);
 $stmt1->bindValue(':end', $end_str);
 ensure_db_ok($stmt1);
-$result1 = $stmt1->execute();
+$result1 = db_execute_safe($db, $stmt1, 'reports species counts');
 
 $detections = [];
-while ($row = $result1->fetchArray(SQLITE3_ASSOC)) {
+while ($row = db_fetch_assoc_safe($result1)) {
     $sci_name = $row['Sci_Name'];
     $com_name = $row['Com_Name'];
     $count = $row['cnt'];
@@ -95,13 +95,15 @@ while ($row = $result1->fetchArray(SQLITE3_ASSOC)) {
     $stmt2->bindValue(':sci', $sci_name);
     $stmt2->bindValue(':pstart', $prior_start_str);
     $stmt2->bindValue(':pend', $prior_end_str);
-    $prior_count = $stmt2->execute()->fetchArray(SQLITE3_ASSOC)['cnt'];
+    $prior_row = db_fetch_assoc_safe(db_execute_safe($db, $stmt2, 'reports prior species count'));
+    $prior_count = (int)($prior_row['cnt'] ?? 0);
 
     // 3. Check if first seen (never seen before this period)
     $stmt3 = $db->prepare('SELECT COUNT(*) as cnt FROM detections WHERE Sci_Name = :sci AND Date < :start');
     $stmt3->bindValue(':sci', $sci_name);
     $stmt3->bindValue(':start', $start_str);
-    $ever_seen_before = $stmt3->execute()->fetchArray(SQLITE3_ASSOC)['cnt'];
+    $seen_row = db_fetch_assoc_safe(db_execute_safe($db, $stmt3, 'reports seen before count'));
+    $ever_seen_before = (int)($seen_row['cnt'] ?? 0);
 
     $detections[] = [
         'name' => $com_name,
@@ -119,12 +121,14 @@ $unique_species = count($detections);
 $stmt_p = $db->prepare('SELECT COUNT(*) as cnt FROM detections WHERE Date BETWEEN :pstart AND :pend');
 $stmt_p->bindValue(':pstart', $prior_start_str);
 $stmt_p->bindValue(':pend', $prior_end_str);
-$prior_total = $stmt_p->execute()->fetchArray(SQLITE3_ASSOC)['cnt'];
+$prior_total_row = db_fetch_assoc_safe(db_execute_safe($db, $stmt_p, 'reports prior total count'));
+$prior_total = (int)($prior_total_row['cnt'] ?? 0);
 
 $stmt_ps = $db->prepare('SELECT COUNT(DISTINCT(Sci_Name)) as cnt FROM detections WHERE Date BETWEEN :pstart AND :pend');
 $stmt_ps->bindValue(':pstart', $prior_start_str);
 $stmt_ps->bindValue(':pend', $prior_end_str);
-$prior_species = $stmt_ps->execute()->fetchArray(SQLITE3_ASSOC)['cnt'];
+$prior_species_row = db_fetch_assoc_safe(db_execute_safe($db, $stmt_ps, 'reports prior species total'));
+$prior_species = (int)($prior_species_row['cnt'] ?? 0);
 
 // 4. Fetch additional KPIs
 $days_in_period = max(1, round(($enddate - $startdate) / 86400) + 1);
@@ -134,7 +138,7 @@ $daily_avg = round($total_detections / $days_in_period);
 $stmt_bd = $db->prepare('SELECT Date, COUNT(*) as cnt FROM detections WHERE Date BETWEEN :start AND :end GROUP BY Date ORDER BY cnt DESC LIMIT 1');
 $stmt_bd->bindValue(':start', $start_str);
 $stmt_bd->bindValue(':end', $end_str);
-$bd_res = $stmt_bd->execute()->fetchArray(SQLITE3_ASSOC);
+$bd_res = db_fetch_assoc_safe(db_execute_safe($db, $stmt_bd, 'reports busiest day'));
 $busiest_day_name = $bd_res ? date('M jS', strtotime($bd_res['Date'])) : 'N/A';
 $busiest_day_count = $bd_res ? $bd_res['cnt'] : 0;
 
@@ -142,7 +146,7 @@ $busiest_day_count = $bd_res ? $bd_res['cnt'] : 0;
 $stmt_ph = $db->prepare('SELECT strftime("%H", Time) as hr, COUNT(*) as cnt FROM detections WHERE Date BETWEEN :start AND :end GROUP BY hr ORDER BY cnt DESC LIMIT 1');
 $stmt_ph->bindValue(':start', $start_str);
 $stmt_ph->bindValue(':end', $end_str);
-$ph_res = $stmt_ph->execute()->fetchArray(SQLITE3_ASSOC);
+$ph_res = db_fetch_assoc_safe(db_execute_safe($db, $stmt_ph, 'reports peak hour'));
 $peak_time = $ph_res ? $ph_res['hr'] . ":00" : 'N/A';
 
 function get_trend_html($current, $prior) {

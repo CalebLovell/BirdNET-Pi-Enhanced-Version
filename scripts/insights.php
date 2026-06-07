@@ -30,20 +30,11 @@ $seasonal_total_species = 0;
 $migration_list_limit = request_int($_GET, 'list_limit', 100, 10, 500);
 
 function get_seasonal_species_total($db) {
-    return $db->querySingle('SELECT COUNT(DISTINCT Sci_Name) FROM detections') ?: 0;
+    return db_query_single_safe($db, 'SELECT COUNT(DISTINCT Sci_Name) FROM detections', 0, 'insights seasonal species total') ?: 0;
 }
 
 function insights_query_all($db, $sql) {
-    $rows = [];
-    $res = $db->query($sql);
-    if ($res === false) {
-        error_log('BirdNET Insights query failed: ' . $db->lastErrorMsg() . ' SQL: ' . $sql);
-        return $rows;
-    }
-    while($row = $res->fetchArray(SQLITE3_ASSOC)) {
-        $rows[] = $row;
-    }
-    return $rows;
+    return db_query_all_safe($db, $sql, 'insights');
 }
 
 function get_seasonal_presence_batch($db, $limit, $offset) {
@@ -61,8 +52,8 @@ function get_seasonal_presence_batch($db, $limit, $offset) {
     ensure_db_ok($top_species_stmt);
     $top_species_stmt->bindValue(':limit', $limit, SQLITE3_INTEGER);
     $top_species_stmt->bindValue(':offset', $offset, SQLITE3_INTEGER);
-    $top_species_res = $top_species_stmt->execute();
-    while($row = $top_species_res->fetchArray(SQLITE3_ASSOC)) {
+    $top_species_res = db_execute_safe($db, $top_species_stmt, 'insights seasonal species batch');
+    while($row = db_fetch_assoc_safe($top_species_res)) {
         $row['actual_segments'] = array_fill(0, 48, 0);
         $seasonal_base[$row['Sci_Name']] = $row;
         $seasonal_scis[] = $row['Sci_Name'];
@@ -84,8 +75,8 @@ function get_seasonal_presence_batch($db, $limit, $offset) {
             WHERE Sci_Name IN (" . implode(',', $escaped_scis) . ")
             GROUP BY Sci_Name, segment
         ";
-        $segments_res = $db->query($segments_sql);
-        while($row = $segments_res->fetchArray(SQLITE3_ASSOC)) {
+        $segments_res = db_query_safe($db, $segments_sql, 'insights seasonal segments');
+        while($row = db_fetch_assoc_safe($segments_res)) {
             $idx = intval($row['segment']) - 1;
             if (isset($seasonal_base[$row['Sci_Name']]) && $idx >= 0 && $idx < 48) {
                 $seasonal_base[$row['Sci_Name']]['actual_segments'][$idx] = intval($row['cnt']);
@@ -186,14 +177,13 @@ if ($subview == 'migration' && isset($_GET['seasonal_batch'])) {
 }
 
 if ($subview == 'dashboard') {
-    $lifetime_species = $db->querySingle('SELECT COUNT(DISTINCT(Sci_Name)) FROM detections') ?: 0;
-    $best_day_res = $db->query('SELECT Date, COUNT(*) as cnt FROM detections GROUP BY Date ORDER BY cnt DESC LIMIT 1');
-    if ($best_day_row = $best_day_res->fetchArray(SQLITE3_ASSOC)) {
+    $lifetime_species = db_query_single_safe($db, 'SELECT COUNT(DISTINCT(Sci_Name)) FROM detections', 0, 'insights lifetime species') ?: 0;
+    if ($best_day_row = db_query_one_safe($db, 'SELECT Date, COUNT(*) as cnt FROM detections GROUP BY Date ORDER BY cnt DESC LIMIT 1', 'insights best day')) {
         $best_day_count = $best_day_row['cnt'];
         $best_day_date = date('M j, Y', strtotime($best_day_row['Date']));
     }
-    $streak_res = $db->query('SELECT Date FROM detections GROUP BY Date ORDER BY Date ASC');
-    $dates = []; while($row = $streak_res->fetchArray(SQLITE3_ASSOC)) { $dates[] = $row['Date']; }
+    $dates = [];
+    foreach (insights_query_all($db, 'SELECT Date FROM detections GROUP BY Date ORDER BY Date ASC') as $row) { $dates[] = $row['Date']; }
     $max_s = 0; $cur_s = 0; $prev = null;
     foreach ($dates as $d_str) {
         if ($prev === null) { $cur_s = 1; }
@@ -201,55 +191,53 @@ if ($subview == 'dashboard') {
         $prev = $d_str;
     }
     $max_streak = max($max_s, $cur_s);
-    $rare_res = $db->query('SELECT Com_Name, Sci_Name, COUNT(*) as cnt, MIN(Date) as first_seen, MAX(Date) as last_seen FROM detections GROUP BY Sci_Name HAVING cnt < 5 ORDER BY cnt ASC, last_seen DESC');
-    while($row = $rare_res->fetchArray(SQLITE3_ASSOC)) { $rarest[] = $row; }
-    $rare_total = $db->querySingle('SELECT COUNT(*) FROM (SELECT Sci_Name FROM detections GROUP BY Sci_Name HAVING COUNT(*) < 5)') ?: 0;
-    $total_detections = $db->querySingle('SELECT COUNT(*) FROM detections') ?: 0;
-    $first_det = $db->querySingle('SELECT MIN(Date) FROM detections');
+    $rarest = insights_query_all($db, 'SELECT Com_Name, Sci_Name, COUNT(*) as cnt, MIN(Date) as first_seen, MAX(Date) as last_seen FROM detections GROUP BY Sci_Name HAVING COUNT(*) < 5 ORDER BY cnt ASC, last_seen DESC');
+    $rare_total = db_query_single_safe($db, 'SELECT COUNT(*) FROM (SELECT Sci_Name FROM detections GROUP BY Sci_Name HAVING COUNT(*) < 5)', 0, 'insights rare total') ?: 0;
+    $total_detections = db_query_single_safe($db, 'SELECT COUNT(*) FROM detections', 0, 'insights total detections') ?: 0;
+    $first_det = db_query_single_safe($db, 'SELECT MIN(Date) FROM detections', null, 'insights first detection');
     $milestones[] = ["title" => "First Detection", "val" => $first_det ?: 'N/A'];
     $milestones[] = ["title" => "Lifetime Detections", "val" => number_format($total_detections)];
-    $top_spec_res = $db->query('SELECT Com_Name, Date, COUNT(*) as cnt FROM detections GROUP BY Sci_Name, Date ORDER BY cnt DESC LIMIT 1');
-    if ($top_spec_day = $top_spec_res->fetchArray(SQLITE3_ASSOC)) {
+    if ($top_spec_day = db_query_one_safe($db, 'SELECT Com_Name, Date, COUNT(*) as cnt FROM detections GROUP BY Sci_Name, Date ORDER BY cnt DESC LIMIT 1', 'insights single day record')) {
         $milestones[] = ["title" => "Single Day Record", "val" => $top_spec_day['cnt'] . " " . $top_spec_day['Com_Name'] . " on " . date('M j, Y', strtotime($top_spec_day['Date']))];
     }
     // Yard Health Calculation
-    $stable_days = $db->querySingle("SELECT COUNT(*) FROM (SELECT Date FROM detections WHERE Date >= '$one_month_ago' GROUP BY Date HAVING COUNT(*) >= 5)") ?: 0;
+    $stable_days = db_query_single_safe($db, "SELECT COUNT(*) FROM (SELECT Date FROM detections WHERE Date >= '$one_month_ago' GROUP BY Date HAVING COUNT(*) >= 5)", 0, 'insights stable days') ?: 0;
     $stability_score = ($stable_days / 30) * 20;
-    $today_vol = $db->querySingle("SELECT COUNT(*) FROM detections WHERE Date = '$today'") ?: 0;
-    $avg_30d_vol = $db->querySingle("SELECT COUNT(*)/30.0 FROM detections WHERE Date >= '$one_month_ago'") ?: 1;
+    $today_vol = db_query_single_safe($db, "SELECT COUNT(*) FROM detections WHERE Date = '$today'", 0, 'insights today volume') ?: 0;
+    $avg_30d_vol = db_query_single_safe($db, "SELECT COUNT(*)/30.0 FROM detections WHERE Date >= '$one_month_ago'", 1, 'insights 30d volume') ?: 1;
     $volume_score = min(20, ($today_vol / (max(1, $avg_30d_vol))) * 10);
-    $rare_detections = $db->querySingle("SELECT COUNT(*) FROM detections WHERE Date >= '$one_month_ago' AND Confidence >= 0.85 AND Sci_Name IN (SELECT Sci_Name FROM detections GROUP BY Sci_Name HAVING COUNT(*) < (SELECT COUNT(*) FROM detections) * 0.01)") ?: 0;
+    $rare_detections = db_query_single_safe($db, "SELECT COUNT(*) FROM detections WHERE Date >= '$one_month_ago' AND Confidence >= 0.85 AND Sci_Name IN (SELECT Sci_Name FROM detections GROUP BY Sci_Name HAVING COUNT(*) < (SELECT COUNT(*) FROM detections) * 0.01)", 0, 'insights rare detections') ?: 0;
     $rarity_score = min(20, $rare_detections * 2);
-    $s_idx = 0; $s_counts = $db->query("SELECT COUNT(*) as cnt FROM detections WHERE Date >= '$one_month_ago' GROUP BY Sci_Name");
-    $t_30d = $db->querySingle("SELECT COUNT(*) FROM detections WHERE Date >= '$one_month_ago'") ?: 0;
-    if ($s_counts && $t_30d > 0) { while($r = $s_counts->fetchArray(SQLITE3_ASSOC)) { $pi = $r['cnt'] / $t_30d; $s_idx -= $pi * log($pi); } }
+    $s_idx = 0; $s_counts = insights_query_all($db, "SELECT COUNT(*) as cnt FROM detections WHERE Date >= '$one_month_ago' GROUP BY Sci_Name");
+    $t_30d = db_query_single_safe($db, "SELECT COUNT(*) FROM detections WHERE Date >= '$one_month_ago'", 0, 'insights diversity total') ?: 0;
+    if ($t_30d > 0) { foreach($s_counts as $r) { $pi = $r['cnt'] / $t_30d; if ($pi > 0) $s_idx -= $pi * log($pi); } }
     $diversity_pts = min(40, ($s_idx / 3.0) * 40);
     $yard_health_score = round($stability_score + $volume_score + $rarity_score + $diversity_pts);
     if ($yard_health_score > 100) $yard_health_score = 100;
     if ($s_idx < 1.5) $recommendations[] = ["icon" => "🌻", "text" => "Diversity is low. Try adding different types of seed or a water feature to attract more species."];
     if ($stable_days < 20) $recommendations[] = ["icon" => "🎤", "text" => "Multiple quiet days detected. Ensure your microphone is unobstructed and the system is running 24/7."];
-    $high_c = $db->querySingle("SELECT COUNT(*) FROM detections WHERE Confidence >= 0.8") ?: 0;
-    $med_c = $db->querySingle("SELECT COUNT(*) FROM detections WHERE Confidence >= 0.5 AND Confidence < 0.8") ?: 0;
-    $low_c = $db->querySingle("SELECT COUNT(*) FROM detections WHERE Confidence < 0.5") ?: 0;
+    $high_c = db_query_single_safe($db, "SELECT COUNT(*) FROM detections WHERE Confidence >= 0.8", 0, 'insights high confidence') ?: 0;
+    $med_c = db_query_single_safe($db, "SELECT COUNT(*) FROM detections WHERE Confidence >= 0.5 AND Confidence < 0.8", 0, 'insights medium confidence') ?: 0;
+    $low_c = db_query_single_safe($db, "SELECT COUNT(*) FROM detections WHERE Confidence < 0.5", 0, 'insights low confidence') ?: 0;
     if ($low_c > ($high_c + $med_c)) $recommendations[] = ["icon" => "⚙️", "text" => "High number of low-confidence detections. You might need to adjust your sensitivity or filter out phantom species."];
     if ($today_vol < $avg_30d_vol * 0.5) $recommendations[] = ["icon" => "🌥️", "text" => "Activity is unusually low today. Check if the weather or local disturbances have gone up."];
     if (empty($recommendations)) $recommendations[] = ["icon" => "🌟", "text" => "Your yard is booming! Keep up the great work maintaining a healthy habitat."];
 }
 
 if ($subview == 'behavior') {
-    $dawn_chorus = []; $dawn_res = $db->query("SELECT Com_Name, AVG(first_minutes) as avg_minutes, COUNT(*) as cnt FROM (SELECT Com_Name, Sci_Name, MIN(CAST(substr(Time, 1, 2) AS REAL) * 60 + CAST(substr(Time, 4, 2) AS REAL)) as first_minutes FROM detections WHERE CAST(substr(Time, 1, 2) AS INTEGER) BETWEEN 4 AND 10 GROUP BY Sci_Name, Date) GROUP BY Sci_Name HAVING cnt >= 3 ORDER BY avg_minutes ASC");
-    while($row = $dawn_res->fetchArray(SQLITE3_ASSOC)) { $hrs = intval($row['avg_minutes'] / 60); $mins = intval($row['avg_minutes']) % 60; $row['avg_time'] = sprintf('%d:%02d AM', $hrs, $mins); $dawn_chorus[] = $row; }
-    $hourly_activity = array_fill(0, 24, 0); $hourly_res = $db->query("SELECT CAST(substr(Time, 1, 2) AS INTEGER) as hour, COUNT(*) as cnt FROM detections GROUP BY hour ORDER BY hour ASC");
-    while($row = $hourly_res->fetchArray(SQLITE3_ASSOC)) { $hourly_activity[$row['hour']] = $row['cnt']; }
+    $dawn_chorus = [];
+    foreach(insights_query_all($db, "SELECT Com_Name, AVG(first_minutes) as avg_minutes, COUNT(*) as cnt FROM (SELECT Com_Name, Sci_Name, MIN(CAST(substr(Time, 1, 2) AS REAL) * 60 + CAST(substr(Time, 4, 2) AS REAL)) as first_minutes FROM detections WHERE CAST(substr(Time, 1, 2) AS INTEGER) BETWEEN 4 AND 10 GROUP BY Sci_Name, Date) GROUP BY Sci_Name HAVING COUNT(*) >= 3 ORDER BY avg_minutes ASC") as $row) { $hrs = intval($row['avg_minutes'] / 60); $mins = intval($row['avg_minutes']) % 60; $row['avg_time'] = sprintf('%d:%02d AM', $hrs, $mins); $dawn_chorus[] = $row; }
+    $hourly_activity = array_fill(0, 24, 0);
+    foreach(insights_query_all($db, "SELECT CAST(substr(Time, 1, 2) AS INTEGER) as hour, COUNT(*) as cnt FROM detections GROUP BY hour ORDER BY hour ASC") as $row) { $hourly_activity[$row['hour']] = $row['cnt']; }
     $hourly_labels_json = json_encode(array_map(function($h) { if ($h == 0) return '12 AM'; if ($h < 12) return $h . ' AM'; if ($h == 12) return '12 PM'; return ($h - 12) . ' PM'; }, range(0, 23)));
     $hourly_values_json = json_encode(array_values($hourly_activity));
     $peak_hour_idx = array_search(max($hourly_activity), $hourly_activity);
     $peak_hour_label = ($peak_hour_idx == 0) ? '12 AM' : (($peak_hour_idx < 12) ? $peak_hour_idx . ' AM' : (($peak_hour_idx == 12) ? '12 PM' : ($peak_hour_idx - 12) . ' PM'));
     $peak_hour_count = max($hourly_activity);
-    $nocturnal = []; $noct_res = $db->query("SELECT Com_Name, COUNT(*) as cnt, AVG(CAST(substr(Time, 1, 2) AS REAL) * 60 + CAST(substr(Time, 4, 2) AS REAL)) as avg_minutes FROM detections WHERE CAST(substr(Time, 1, 2) AS INTEGER) >= 22 OR CAST(substr(Time, 1, 2) AS INTEGER) < 4 GROUP BY Sci_Name HAVING cnt >= 2 ORDER BY cnt DESC");
-    while($row = $noct_res->fetchArray(SQLITE3_ASSOC)) { $m = $row['avg_minutes']; $hrs = intval($m / 60); $mins = intval($m) % 60; if ($hrs >= 12) { $row['avg_time'] = sprintf('%d:%02d PM', $hrs == 12 ? 12 : $hrs - 12, $mins); } else { $row['avg_time'] = sprintf('%d:%02d AM', $hrs == 0 ? 12 : $hrs, $mins); } $nocturnal[] = $row; }
-    $activity_windows = []; $window_res = $db->query("SELECT Com_Name, MIN(Time) as earliest, MAX(Time) as latest, COUNT(*) as cnt FROM detections GROUP BY Sci_Name HAVING cnt >= 5 ORDER BY cnt DESC");
-    while($row = $window_res->fetchArray(SQLITE3_ASSOC)) { $e_h = intval(substr($row['earliest'], 0, 2)); $e_m = substr($row['earliest'], 3, 2); $l_h = intval(substr($row['latest'], 0, 2)); $l_m = substr($row['latest'], 3, 2); $row['earliest_fmt'] = sprintf('%d:%s %s', $e_h % 12 ?: 12, $e_m, $e_h < 12 ? 'AM' : 'PM'); $row['latest_fmt'] = sprintf('%d:%s %s', $l_h % 12 ?: 12, $l_m, $l_h < 12 ? 'AM' : 'PM'); $activity_windows[] = $row; }
+    $nocturnal = [];
+    foreach(insights_query_all($db, "SELECT Com_Name, COUNT(*) as cnt, AVG(CAST(substr(Time, 1, 2) AS REAL) * 60 + CAST(substr(Time, 4, 2) AS REAL)) as avg_minutes FROM detections WHERE CAST(substr(Time, 1, 2) AS INTEGER) >= 22 OR CAST(substr(Time, 1, 2) AS INTEGER) < 4 GROUP BY Sci_Name HAVING COUNT(*) >= 2 ORDER BY cnt DESC") as $row) { $m = $row['avg_minutes']; $hrs = intval($m / 60); $mins = intval($m) % 60; if ($hrs >= 12) { $row['avg_time'] = sprintf('%d:%02d PM', $hrs == 12 ? 12 : $hrs - 12, $mins); } else { $row['avg_time'] = sprintf('%d:%02d AM', $hrs == 0 ? 12 : $hrs, $mins); } $nocturnal[] = $row; }
+    $activity_windows = [];
+    foreach(insights_query_all($db, "SELECT Com_Name, MIN(Time) as earliest, MAX(Time) as latest, COUNT(*) as cnt FROM detections GROUP BY Sci_Name HAVING COUNT(*) >= 5 ORDER BY cnt DESC") as $row) { $e_h = intval(substr($row['earliest'], 0, 2)); $e_m = substr($row['earliest'], 3, 2); $l_h = intval(substr($row['latest'], 0, 2)); $l_m = substr($row['latest'], 3, 2); $row['earliest_fmt'] = sprintf('%d:%s %s', $e_h % 12 ?: 12, $e_m, $e_h < 12 ? 'AM' : 'PM'); $row['latest_fmt'] = sprintf('%d:%s %s', $l_h % 12 ?: 12, $l_m, $l_h < 12 ? 'AM' : 'PM'); $activity_windows[] = $row; }
 }
 
 if ($subview == 'migration') {
@@ -276,8 +264,8 @@ if ($subview == 'migration') {
     $arrival_stmt->bindValue(':two_weeks_ago', $two_weeks_ago, SQLITE3_TEXT);
     $arrival_stmt->bindValue(':four_weeks_ago', $four_weeks_ago, SQLITE3_TEXT);
     $arrival_stmt->bindValue(':limit', $migration_list_limit, SQLITE3_INTEGER);
-    $arrival_res = $arrival_stmt->execute();
-    while($row = $arrival_res->fetchArray(SQLITE3_ASSOC)) { $new_arrivals[] = $row; }
+    $arrival_res = db_execute_safe($db, $arrival_stmt, 'insights new arrivals');
+    while($row = db_fetch_assoc_safe($arrival_res)) { $new_arrivals[] = $row; }
     $quiet_stmt = $db->prepare("
         SELECT Com_Name, Sci_Name, COUNT(*) AS total_cnt, MAX(Date) AS last_seen
         FROM detections
@@ -289,8 +277,8 @@ if ($subview == 'migration') {
     ensure_db_ok($quiet_stmt);
     $quiet_stmt->bindValue(':two_weeks_ago', $two_weeks_ago, SQLITE3_TEXT);
     $quiet_stmt->bindValue(':limit', $migration_list_limit, SQLITE3_INTEGER);
-    $quiet_res = $quiet_stmt->execute();
-    while($row = $quiet_res->fetchArray(SQLITE3_ASSOC)) { $row['days_ago'] = intval((time() - strtotime($row['last_seen'])) / 86400); $gone_quiet[] = $row; }
+    $quiet_res = db_execute_safe($db, $quiet_stmt, 'insights quiet species');
+    while($row = db_fetch_assoc_safe($quiet_res)) { $row['days_ago'] = intval((time() - strtotime($row['last_seen'])) / 86400); $gone_quiet[] = $row; }
     $cur_yr = date('Y'); $last_yr = $cur_yr - 1;
     $current_year = $cur_yr;
     $last_year = $last_yr;
@@ -331,35 +319,34 @@ if ($subview == 'migration') {
     $yoy_stmt->bindValue(':cur_year_as_last_end', $cur_year_as_last_end, SQLITE3_TEXT);
     $yoy_stmt->bindValue(':cur_yr', (string)$cur_yr, SQLITE3_TEXT);
     $yoy_stmt->bindValue(':limit', $migration_list_limit, SQLITE3_INTEGER);
-    $yoy_res = $yoy_stmt->execute();
-    while($row = $yoy_res->fetchArray(SQLITE3_ASSOC)) { $yoy_comparison[] = $row; }
+    $yoy_res = db_execute_safe($db, $yoy_stmt, 'insights yoy migration comparison');
+    while($row = db_fetch_assoc_safe($yoy_res)) { $yoy_comparison[] = $row; }
 
     $seasonal_total_species = get_seasonal_species_total($db);
     $seasonal_top = get_seasonal_presence_batch($db, $seasonal_species_limit, 0);
-    $monthly_res = $db->query("SELECT * FROM (SELECT strftime('%Y-%m', Date) as month, COUNT(DISTINCT Sci_Name) as diversity, COUNT(*) as detections FROM detections GROUP BY month ORDER BY month DESC LIMIT 24) ORDER BY month ASC");
-    while($row = $monthly_res->fetchArray(SQLITE3_ASSOC)) { $monthly_stats[] = $row; }
+    $monthly_stats = insights_query_all($db, "SELECT * FROM (SELECT strftime('%Y-%m', Date) as month, COUNT(DISTINCT Sci_Name) as diversity, COUNT(*) as detections FROM detections GROUP BY month ORDER BY month DESC LIMIT 24) ORDER BY month ASC");
     $month_labels = json_encode(array_map(function($r) { return $r['month']; }, $monthly_stats));
     $month_div = json_encode(array_map(function($r) { return $r['diversity']; }, $monthly_stats));
     $month_det = json_encode(array_map(function($r) { return $r['detections']; }, $monthly_stats));
-    $s_counts = $db->query("SELECT COUNT(*) as cnt FROM detections WHERE Date >= '$one_month_ago' GROUP BY Sci_Name");
-    $t_30d = $db->querySingle("SELECT COUNT(*) FROM detections WHERE Date >= '$one_month_ago'") ?: 0;
-    if ($s_counts && $t_30d > 0) { while($r = $s_counts->fetchArray(SQLITE3_ASSOC)) { $pi = $r['cnt'] / $t_30d; $shannon_index -= $pi * log($pi); } }
+    $s_counts = insights_query_all($db, "SELECT COUNT(*) as cnt FROM detections WHERE Date >= '$one_month_ago' GROUP BY Sci_Name");
+    $t_30d = db_query_single_safe($db, "SELECT COUNT(*) FROM detections WHERE Date >= '$one_month_ago'", 0, 'insights migration diversity total') ?: 0;
+    if ($t_30d > 0) { foreach($s_counts as $r) { $pi = $r['cnt'] / $t_30d; if ($pi > 0) $shannon_index -= $pi * log($pi); } }
     $shannon_index = round($shannon_index, 3);
     $diversity_score_text = ($shannon_index > 2.5) ? "Very High" : (($shannon_index > 1.8) ? "High" : (($shannon_index > 1.2) ? "Moderate" : "Low"));
     $this_month_start = date('Y-m-01');
     $next_month_start = date('Y-m-01', strtotime('+1 month', strtotime($this_month_start)));
     $last_year_month_start = date('Y-m-01', strtotime('-1 year', strtotime($this_month_start)));
     $last_year_next_month_start = date('Y-m-01', strtotime('+1 month', strtotime($last_year_month_start)));
-    $this_month_diversity = $db->querySingle("SELECT COUNT(DISTINCT Sci_Name) FROM detections WHERE Date >= '$this_month_start' AND Date < '$next_month_start'") ?: 0;
-    $last_year_diversity = $db->querySingle("SELECT COUNT(DISTINCT Sci_Name) FROM detections WHERE Date >= '$last_year_month_start' AND Date < '$last_year_next_month_start'") ?: 0;
+    $this_month_diversity = db_query_single_safe($db, "SELECT COUNT(DISTINCT Sci_Name) FROM detections WHERE Date >= '$this_month_start' AND Date < '$next_month_start'", 0, 'insights current month diversity') ?: 0;
+    $last_year_diversity = db_query_single_safe($db, "SELECT COUNT(DISTINCT Sci_Name) FROM detections WHERE Date >= '$last_year_month_start' AND Date < '$last_year_next_month_start'", 0, 'insights last year diversity') ?: 0;
     $yoy_diversity_diff = $this_month_diversity - $last_year_diversity;
 }
 
 if ($subview == 'environmental') {
     $wmo_codes = [0 => 'Clear sky', 1 => 'Mostly clear', 2 => 'Partly cloudy', 3 => 'Overcast', 45 => 'Fog', 48 => 'Rime fog', 51 => 'Light drizzle', 53 => 'Moderate drizzle', 55 => 'Dense drizzle', 61 => 'Slight rain', 63 => 'Moderate rain', 65 => 'Heavy rain', 71 => 'Slight snow', 73 => 'Moderate snow', 75 => 'Heavy snow', 80 => 'Slight showers', 81 => 'Moderate showers', 82 => 'Violent showers', 95 => 'Thunderstorm', 96 => 'Thunderstorm + hail', 99 => 'Thunderstorm + heavy hail'];
-    $has_weather = ($db->querySingle("SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='weather'") > 0) && ($db->querySingle("SELECT COUNT(*) FROM weather") > 0);
+    $has_weather = (db_query_single_safe($db, "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='weather'", 0, 'insights weather table exists') > 0) && (db_query_single_safe($db, "SELECT COUNT(*) FROM weather", 0, 'insights weather row count') > 0);
     if ($has_weather) {
-        $temp_res = $db->query("SELECT CASE WHEN w.Temp IS NULL THEN 'Unknown' WHEN w.Temp < 32 THEN 'Below 32°F' WHEN w.Temp < 46 THEN '32–45°F' WHEN w.Temp < 56 THEN '46–55°F' WHEN w.Temp < 66 THEN '56–65°F' WHEN w.Temp < 76 THEN '66–75°F' WHEN w.Temp < 86 THEN '76–85°F' WHEN w.Temp < 96 THEN '86–95°F' ELSE 'Above 95°F' END as bracket, COUNT(*) as det_count, COUNT(DISTINCT d.Sci_Name) as species_count, ROUND(AVG(w.Temp), 1) as avg_temp FROM detections d INNER JOIN weather w ON d.Date = w.Date AND CAST(substr(d.Time, 1, 2) AS INTEGER) = w.Hour GROUP BY bracket");
+        $temp_res = db_query_safe($db, "SELECT CASE WHEN w.Temp IS NULL THEN 'Unknown' WHEN w.Temp < 32 THEN 'Below 32°F' WHEN w.Temp < 46 THEN '32–45°F' WHEN w.Temp < 56 THEN '46–55°F' WHEN w.Temp < 66 THEN '56–65°F' WHEN w.Temp < 76 THEN '66–75°F' WHEN w.Temp < 86 THEN '76–85°F' WHEN w.Temp < 96 THEN '86–95°F' ELSE 'Above 95°F' END as bracket, COUNT(*) as det_count, COUNT(DISTINCT d.Sci_Name) as species_count, ROUND(AVG(w.Temp), 1) as avg_temp FROM detections d INNER JOIN weather w ON d.Date = w.Date AND CAST(substr(d.Time, 1, 2) AS INTEGER) = w.Hour GROUP BY bracket", 'insights weather temperature brackets');
         $master_brackets = [
             'Below 32°F' => ['bracket' => 'Below 32°F', 'det_count' => 0, 'species_count' => 0],
             '32–45°F' => ['bracket' => '32–45°F', 'det_count' => 0, 'species_count' => 0],
@@ -370,7 +357,7 @@ if ($subview == 'environmental') {
             '86–95°F' => ['bracket' => '86–95°F', 'det_count' => 0, 'species_count' => 0],
             'Above 95°F' => ['bracket' => 'Above 95°F', 'det_count' => 0, 'species_count' => 0]
         ];
-        while($row = $temp_res->fetchArray(SQLITE3_ASSOC)) {
+        while($row = db_fetch_assoc_safe($temp_res)) {
             if (isset($master_brackets[$row['bracket']])) {
                 $master_brackets[$row['bracket']] = $row;
             } else if ($row['bracket'] == 'Unknown') {
@@ -387,7 +374,7 @@ if ($subview == 'environmental') {
             'Thunderstorm' => ['emoji' => '⛈️', 'det_count' => 0, 'species_count' => 0]
         ];
 
-        $cond_res = $db->query("SELECT 
+        $cond_res = db_query_safe($db, "SELECT
             CASE 
                 WHEN w.ConditionCode = 0 THEN 'Clear'
                 WHEN w.ConditionCode BETWEEN 1 AND 3 THEN 'Cloudy'
@@ -401,9 +388,9 @@ if ($subview == 'environmental') {
             COUNT(DISTINCT d.Sci_Name) as species_count 
             FROM detections d 
             INNER JOIN weather w ON d.Date = w.Date AND CAST(substr(d.Time, 1, 2) AS INTEGER) = w.Hour 
-            GROUP BY description");
+            GROUP BY description", 'insights weather conditions');
         
-        while($row = $cond_res->fetchArray(SQLITE3_ASSOC)) { 
+        while($row = db_fetch_assoc_safe($cond_res)) {
             $desc = $row['description'];
             if (isset($master_conditions[$desc])) {
                 $master_conditions[$desc]['det_count'] = $row['det_count'];
@@ -421,7 +408,7 @@ if ($subview == 'environmental') {
         ];
 
         // 1. Bracket totals
-        $wind_res = $db->query("SELECT 
+        $wind_res = db_query_safe($db, "SELECT
             CASE 
                 WHEN w.WindSpeed <= 5 THEN 'Calm (0-5)'
                 WHEN w.WindSpeed <= 15 THEN 'Breezy (6-15)'
@@ -433,10 +420,10 @@ if ($subview == 'environmental') {
             FROM detections d 
             INNER JOIN weather w ON d.Date = w.Date AND CAST(substr(d.Time, 1, 2) AS INTEGER) = w.Hour 
             WHERE w.WindSpeed IS NOT NULL
-            GROUP BY bracket");
+            GROUP BY bracket", 'insights weather wind speed');
 
         if ($wind_res) {
-            while($row = $wind_res->fetchArray(SQLITE3_ASSOC)) {
+            while($row = db_fetch_assoc_safe($wind_res)) {
                 $b = $row['bracket'];
                 if (isset($unified_wind[$b])) {
                     $unified_wind[$b]['det_count'] = $row['det_count'];
@@ -446,7 +433,7 @@ if ($subview == 'environmental') {
         }
 
         // 2. Cardinal breakdown per bracket
-        $nest_res = $db->query("SELECT 
+        $nest_res = db_query_safe($db, "SELECT
             CASE 
                 WHEN w.WindSpeed <= 5 THEN 'Calm (0-5)'
                 WHEN w.WindSpeed <= 15 THEN 'Breezy (6-15)'
@@ -467,11 +454,11 @@ if ($subview == 'environmental') {
             FROM detections d 
             INNER JOIN weather w ON d.Date = w.Date AND CAST(substr(d.Time, 1, 2) AS INTEGER) = w.Hour 
             WHERE w.WindSpeed IS NOT NULL AND w.WindDirection IS NOT NULL
-            GROUP BY bracket, cardinal");
+            GROUP BY bracket, cardinal", 'insights weather wind direction');
 
         if ($nest_res) {
             $cardinal_emojis = ['N'=>'⬇️','NE'=>'↙️','E'=>'⬅️','SE'=>'↖️','S'=>'⬆️','SW'=>'↗️','W'=>'➡️','NW'=>'↘️'];
-            while($row = $nest_res->fetchArray(SQLITE3_ASSOC)) {
+            while($row = db_fetch_assoc_safe($nest_res)) {
                 $b = $row['bracket'];
                 if (isset($unified_wind[$b])) {
                     $unified_wind[$b]['cardinals'][] = [
@@ -483,8 +470,8 @@ if ($subview == 'environmental') {
             }
         }
         $wind_impact = $unified_wind;
-        $ideal_res = $db->query("SELECT d.Com_Name, ROUND(AVG(w.Temp), 1) as avg_temp, ROUND(MIN(w.Temp), 1) as min_temp, ROUND(MAX(w.Temp), 1) as max_temp, COUNT(*) as cnt FROM detections d INNER JOIN weather w ON d.Date = w.Date AND CAST(substr(d.Time, 1, 2) AS INTEGER) = w.Hour GROUP BY d.Sci_Name HAVING cnt >= 5 ORDER BY cnt DESC");
-        while($row = $ideal_res->fetchArray(SQLITE3_ASSOC)) { $species_ideal[] = $row; }
+        $ideal_res = db_query_safe($db, "SELECT d.Com_Name, ROUND(AVG(w.Temp), 1) as avg_temp, ROUND(MIN(w.Temp), 1) as min_temp, ROUND(MAX(w.Temp), 1) as max_temp, COUNT(*) as cnt FROM detections d INNER JOIN weather w ON d.Date = w.Date AND CAST(substr(d.Time, 1, 2) AS INTEGER) = w.Hour GROUP BY d.Sci_Name HAVING cnt >= 5 ORDER BY cnt DESC", 'insights species ideal temperature');
+        while($row = db_fetch_assoc_safe($ideal_res)) { $species_ideal[] = $row; }
         $trend_stmt = $db->prepare("
             SELECT d.Date,
                    COUNT(*) as det_count,
@@ -502,8 +489,8 @@ if ($subview == 'environmental') {
         ");
         ensure_db_ok($trend_stmt);
         $trend_stmt->bindValue(':one_month_ago', $one_month_ago, SQLITE3_TEXT);
-        $trend_res = $trend_stmt->execute();
-        while($row = $trend_res->fetchArray(SQLITE3_ASSOC)) { $temp_vs_detections[] = $row; }
+        $trend_res = db_execute_safe($db, $trend_stmt, 'insights weather trend');
+        while($row = db_fetch_assoc_safe($trend_res)) { $temp_vs_detections[] = $row; }
         $temp_trend_labels = json_encode(array_map(function($r) { return date('M j', strtotime($r['Date'])); }, $temp_vs_detections));
         $temp_trend_temps = json_encode(array_map(function($r) { return $r['avg_temp']; }, $temp_vs_detections));
         $temp_trend_dets = json_encode(array_map(function($r) { return $r['det_count']; }, $temp_vs_detections));
@@ -514,17 +501,17 @@ if ($subview == 'health') {
     $confidence_trend = insights_query_all($db, "SELECT Date, ROUND(AVG(Confidence), 3) as avg_conf, COUNT(*) as det_count FROM detections WHERE Date >= '$one_month_ago' GROUP BY Date ORDER BY Date ASC");
     $conf_labels_json = json_encode(array_map(function($r) { return date('M j', strtotime($r['Date'])); }, $confidence_trend));
     $conf_values_json = json_encode(array_map(function($r) { return floatval($r['avg_conf']); }, $confidence_trend));
-    $overall_avg_conf = $db->querySingle("SELECT ROUND(AVG(Confidence), 3) FROM detections") ?: 0;
+    $overall_avg_conf = db_query_single_safe($db, "SELECT ROUND(AVG(Confidence), 3) FROM detections", 0, 'insights overall confidence') ?: 0;
     $phantom_species = insights_query_all($db, "SELECT Com_Name, Sci_Name, COUNT(*) as cnt, ROUND(AVG(Confidence), 3) as avg_conf, ROUND(MIN(Confidence), 3) as min_conf FROM detections WHERE Date >= '$one_month_ago' GROUP BY Sci_Name HAVING COUNT(*) >= 3 AND AVG(Confidence) < 0.6 ORDER BY avg_conf ASC");
-    $avg_daily = $db->querySingle("SELECT ROUND(AVG(cnt), 1) FROM (SELECT COUNT(*) as cnt FROM detections GROUP BY Date)") ?: 0;
+    $avg_daily = db_query_single_safe($db, "SELECT ROUND(AVG(cnt), 1) FROM (SELECT COUNT(*) as cnt FROM detections GROUP BY Date)", 0, 'insights average daily detections') ?: 0;
     $burst_days = insights_query_all($db, "SELECT Date, COUNT(*) as cnt, COUNT(DISTINCT Sci_Name) as species_count FROM detections GROUP BY Date HAVING COUNT(*) > $avg_daily * 1.5 ORDER BY cnt DESC LIMIT 5");
     $silent_days = insights_query_all($db, "SELECT Date, COUNT(*) as cnt FROM detections GROUP BY Date HAVING COUNT(*) <= 3 ORDER BY Date DESC LIMIT 5");
-    $high_conf_count = $db->querySingle("SELECT COUNT(*) FROM detections WHERE Confidence >= 0.8") ?: 0;
-    $med_conf_count = $db->querySingle("SELECT COUNT(*) FROM detections WHERE Confidence >= 0.5 AND Confidence < 0.8") ?: 0;
-    $low_conf_count = $db->querySingle("SELECT COUNT(*) FROM detections WHERE Confidence < 0.5") ?: 0;
+    $high_conf_count = db_query_single_safe($db, "SELECT COUNT(*) FROM detections WHERE Confidence >= 0.8", 0, 'insights high confidence count') ?: 0;
+    $med_conf_count = db_query_single_safe($db, "SELECT COUNT(*) FROM detections WHERE Confidence >= 0.5 AND Confidence < 0.8", 0, 'insights medium confidence count') ?: 0;
+    $low_conf_count = db_query_single_safe($db, "SELECT COUNT(*) FROM detections WHERE Confidence < 0.5", 0, 'insights low confidence count') ?: 0;
     $expected_today = insights_query_all($db, "SELECT Com_Name, Sci_Name, COUNT(DISTINCT strftime('%Y', Date)) as years_present FROM detections WHERE strftime('%j', Date) BETWEEN strftime('%j', 'now', '-3 days') AND strftime('%j', 'now', '+3 days') AND strftime('%Y', Date) < strftime('%Y', 'now') GROUP BY Sci_Name ORDER BY years_present DESC");
     $top_5_rows = insights_query_all($db, "SELECT Sci_Name, Com_Name FROM detections GROUP BY Sci_Name ORDER BY COUNT(*) DESC");
-    foreach($top_5_rows as $row) { $pw = $db->querySingle("SELECT strftime('%W', Date) as week, COUNT(*) as cnt FROM detections WHERE Sci_Name = '" . $db->escapeString($row['Sci_Name']) . "' GROUP BY week ORDER BY cnt DESC LIMIT 1", true); $row['peak_week'] = $pw ? $pw['week'] : '??'; $row['peak_count'] = $pw ? $pw['cnt'] : 0; $peak_species[] = $row; }
+    foreach($top_5_rows as $row) { $pw = db_query_one_safe($db, "SELECT strftime('%W', Date) as week, COUNT(*) as cnt FROM detections WHERE Sci_Name = '" . $db->escapeString($row['Sci_Name']) . "' GROUP BY week ORDER BY cnt DESC LIMIT 1", 'insights peak week'); $row['peak_week'] = $pw ? $pw['week'] : '??'; $row['peak_count'] = $pw ? $pw['cnt'] : 0; $peak_species[] = $row; }
 }
 
 if ($subview == 'forecasting') {
@@ -533,7 +520,7 @@ if ($subview == 'forecasting') {
     $month_div = json_encode(array_map(function($r) { return $r['diversity']; }, $monthly_stats));
     $month_det = json_encode(array_map(function($r) { return $r['detections']; }, $monthly_stats));
     
-    $t_30d = $db->querySingle("SELECT COUNT(*) FROM detections WHERE Date >= '$one_month_ago'") ?: 0;
+    $t_30d = db_query_single_safe($db, "SELECT COUNT(*) FROM detections WHERE Date >= '$one_month_ago'", 0, 'insights forecasting diversity total') ?: 0;
     $s_counts = insights_query_all($db, "SELECT COUNT(*) as cnt FROM detections WHERE Date >= '$one_month_ago' GROUP BY Sci_Name");
     if ($t_30d > 0) {
         foreach($s_counts as $r) { $pi = $r['cnt'] / $t_30d; if ($pi > 0) $shannon_index -= $pi * log($pi); }
@@ -541,8 +528,8 @@ if ($subview == 'forecasting') {
     $shannon_index = round($shannon_index, 3);
     $diversity_score_text = ($shannon_index > 2.5) ? "Very High" : (($shannon_index > 1.8) ? "High" : (($shannon_index > 1.2) ? "Moderate" : "Low"));
     
-    $this_month_diversity = $db->querySingle("SELECT COUNT(DISTINCT Sci_Name) FROM detections WHERE strftime('%m', Date) = strftime('%m', 'now') AND strftime('%Y', Date) = strftime('%Y', 'now')") ?: 0;
-    $last_year_diversity = $db->querySingle("SELECT COUNT(DISTINCT Sci_Name) FROM detections WHERE strftime('%m', Date) = strftime('%m', 'now') AND strftime('%Y', Date) = strftime('%Y', 'now', '-1 year')") ?: 0;
+    $this_month_diversity = db_query_single_safe($db, "SELECT COUNT(DISTINCT Sci_Name) FROM detections WHERE strftime('%m', Date) = strftime('%m', 'now') AND strftime('%Y', Date) = strftime('%Y', 'now')", 0, 'insights forecasting current month diversity') ?: 0;
+    $last_year_diversity = db_query_single_safe($db, "SELECT COUNT(DISTINCT Sci_Name) FROM detections WHERE strftime('%m', Date) = strftime('%m', 'now') AND strftime('%Y', Date) = strftime('%Y', 'now', '-1 year')", 0, 'insights forecasting last year diversity') ?: 0;
     $yoy_diversity_diff = $this_month_diversity - $last_year_diversity;
     $current_month_name = date('F');
     $yoy_diversity_pct = $last_year_diversity > 0 ? round(($yoy_diversity_diff / $last_year_diversity) * 100) : 0;
@@ -550,7 +537,7 @@ if ($subview == 'forecasting') {
     $expected_today = insights_query_all($db, "SELECT Com_Name, Sci_Name, COUNT(DISTINCT strftime('%Y', Date)) as years_present FROM detections WHERE strftime('%j', Date) BETWEEN strftime('%j', 'now', '-3 days') AND strftime('%j', 'now', '+3 days') AND strftime('%Y', Date) < strftime('%Y', 'now') GROUP BY Sci_Name ORDER BY years_present DESC");
     
     $top_5_rows = insights_query_all($db, "SELECT Sci_Name, Com_Name FROM detections GROUP BY Sci_Name ORDER BY COUNT(*) DESC");
-    foreach($top_5_rows as $row) { $pw = $db->querySingle("SELECT strftime('%W', Date) as week, COUNT(*) as cnt FROM detections WHERE Sci_Name = '" . $db->escapeString($row['Sci_Name']) . "' GROUP BY week ORDER BY cnt DESC LIMIT 1", true); $row['peak_week'] = $pw ? $pw['week'] : '??'; $row['peak_count'] = $pw ? $pw['cnt'] : 0; $peak_species[] = $row; }
+    foreach($top_5_rows as $row) { $pw = db_query_one_safe($db, "SELECT strftime('%W', Date) as week, COUNT(*) as cnt FROM detections WHERE Sci_Name = '" . $db->escapeString($row['Sci_Name']) . "' GROUP BY week ORDER BY cnt DESC LIMIT 1", 'insights forecasting peak week'); $row['peak_week'] = $pw ? $pw['week'] : '??'; $row['peak_count'] = $pw ? $pw['cnt'] : 0; $peak_species[] = $row; }
 }
 
 $db->close();

@@ -184,7 +184,7 @@ if(isset($_GET['shiftfile'])) {
 if(isset($_GET['bydate'])){
   $statement = $db->prepare('SELECT DISTINCT(Date) FROM detections GROUP BY Date ORDER BY Date DESC');
   ensure_db_ok($statement);
-  $result = $statement->execute();
+  $result = db_execute_safe($db, $statement, 'recordings by date');
   $view = "bydate";
 
   #Specific Date
@@ -648,7 +648,7 @@ if(!isset($_GET['species']) && !isset($_GET['filename'])){
   if($view == "bydate") {
     
     echo "<div class='date-grid'>";
-    while($results=$result->fetchArray(SQLITE3_ASSOC)){
+    while($results=db_fetch_assoc_safe($result)){
       $date = $results['Date'];
       if(realpath($home."/BirdSongs/Extracted/By_Date/".$date) !== false){
         $is_today = ($date == date('Y-m-d'));
@@ -671,7 +671,7 @@ if(!isset($_GET['species']) && !isset($_GET['filename'])){
   } elseif($view == "byspecies") {
     $birds = array();
     $values = array();
-    while($results=$result->fetchArray(SQLITE3_ASSOC))
+    while($results=db_fetch_assoc_safe($result))
     {
       $birds[] = $results['Sci_Name'];
       $values[] = get_label($results, $_GET['sort']);
@@ -711,7 +711,7 @@ if(!isset($_GET['species']) && !isset($_GET['filename'])){
   } elseif($view == "date") {
     $birds = array();
     $values = array();
-    while($results=$result->fetchArray(SQLITE3_ASSOC))
+    while($results=db_fetch_assoc_safe($result))
     {
       $dir_name = str_replace("'", '', $results['Com_Name']);
       if(realpath($home."/BirdSongs/Extracted/By_Date/".$date."/".str_replace(" ", "_", $dir_name)) !== false){
@@ -992,7 +992,12 @@ $name = htmlspecialchars_decode($_GET['species'], ENT_QUOTES);
 $limit = isset($_GET['limit']) ? (int)$_GET['limit'] : 40;
 
 $result2 = fetch_all_detections($name, $_GET['sort'], $_SESSION['date']);
-$results=$result2->fetchArray(SQLITE3_ASSOC);
+$results=db_fetch_assoc_safe($result2);
+if (!$results) {
+  echo "<div class='no-recordings-msg'><b>No recordings were found.</b></div>";
+  echo "</div>";
+  return;
+}
 $com_name = $results['Com_Name'];
 $result2->reset();
 $sciname = $name;
@@ -1011,7 +1016,7 @@ $url = $info_url['URL'];
 
 <?php
   $iter=0;
-  while($results=$result2->fetchArray(SQLITE3_ASSOC))
+  while($results=db_fetch_assoc_safe($result2))
   {
     $comname = preg_replace('/ /', '_', $results['Com_Name']);
     $comname = preg_replace('/\'/', '', $comname);
@@ -1118,8 +1123,12 @@ echo "</div>"; // close recording-detail-wrap
     $statement2 = $db->prepare("SELECT * FROM detections where File_name == :file_name ORDER BY Date DESC, Time DESC");
     ensure_db_ok($statement2);
     $statement2->bindValue(':file_name', $name, SQLITE3_TEXT);
-    $result2 = $statement2->execute();
-    $results = $result2->fetchArray(SQLITE3_ASSOC);
+    $result2 = db_execute_safe($db, $statement2, 'recordings by filename');
+    $results = db_fetch_assoc_safe($result2);
+    if (!$results) {
+      echo "<div class='no-recordings-msg'><b>No recording was found for this file.</b></div>";
+      return;
+    }
     $sciname = $results['Sci_Name'];
     $result2->reset();
     $info_url = get_info_url($sciname);
@@ -1130,7 +1139,7 @@ echo "</div>"; // close recording-detail-wrap
           <a href=\"$url\" target=\"_blank\"><img title=\"$url_title\" src=\"images/info.png\" width=\"20\"></a>
           <a href=\"https://wikipedia.org/wiki/$sciname\" target=\"_blank\"><img title=\"Wikipedia\" src=\"images/wiki.png\" width=\"20\"></a>
       </th></tr>";
-      while($results=$result2->fetchArray(SQLITE3_ASSOC))
+      while($results=db_fetch_assoc_safe($result2))
       {
         $comname = preg_replace('/ /', '_', $results['Com_Name']);
         $comname = preg_replace('/\'/', '', $comname);

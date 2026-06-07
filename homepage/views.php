@@ -351,18 +351,18 @@ elseif ($config["LONGITUDE"] == "0.000") {
     $current_weather_str = "";
     try {
       $feed_db = new SQLite3('./scripts/birds.db', SQLITE3_OPEN_READONLY);
-      $check_weather = $feed_db->query("SELECT name FROM sqlite_master WHERE type='table' AND name='weather'");
-      if ($check_weather && $check_weather->fetchArray()) {
+      $check_weather = db_query_safe($feed_db, "SELECT name FROM sqlite_master WHERE type='table' AND name='weather'", 'sidebar weather table');
+      if (db_fetch_assoc_safe($check_weather)) {
           $hasIsDay = false;
-          $cols = $feed_db->query("PRAGMA table_info(weather)");
-          while($c = $cols->fetchArray()) { if($c['name'] == 'IsDay') { $hasIsDay = true; break; } }
+          $cols = db_query_safe($feed_db, "PRAGMA table_info(weather)", 'sidebar weather columns');
+          while($c = db_fetch_assoc_safe($cols)) { if($c['name'] == 'IsDay') { $hasIsDay = true; break; } }
           
           $sel = $hasIsDay ? "Temp, ConditionCode, IsDay" : "Temp, ConditionCode";
           $w_stmt = $feed_db->prepare("SELECT $sel FROM weather WHERE Date = DATE('now','localtime') AND Hour = ?");
           if ($w_stmt) {
               $w_stmt->bindValue(1, (int)date('G'), SQLITE3_INTEGER);
-              $w_res = $w_stmt->execute();
-              if ($w_row = $w_res->fetchArray(SQLITE3_ASSOC)) {
+              $w_res = db_execute_safe($feed_db, $w_stmt, 'sidebar current weather');
+              if ($w_row = db_fetch_assoc_safe($w_res)) {
                   $temp = round((float)$w_row['Temp']);
                   $code = (int)$w_row['ConditionCode'];
                   $is_day = $hasIsDay ? (int)$w_row['IsDay'] : 1;
@@ -377,23 +377,57 @@ elseif ($config["LONGITUDE"] == "0.000") {
                   elseif ($code >= 80 && $code <= 82) $emoji = $is_day === 0 ? '🌧️' : '🌦️';
                   elseif ($code >= 95) $emoji = '⛈️';
                   
-                  $current_weather_str = "<span style='margin-left:auto; font-size:0.9em; font-weight:normal; color:var(--text-secondary, #6b7280);'>{$temp}&deg;F {$emoji}</span>";
+                  $current_weather_str = "<span id='liveFeedWeather' style='margin-left:auto; font-size:0.9em; font-weight:normal; color:var(--text-secondary, #6b7280);'>{$temp}&deg;F {$emoji}</span>";
               }
           }
       }
       $feed_db->close();
     } catch(Exception $e) {}
   ?>
-    <h3 style="display:flex; align-items:center; width:100%;"><span class="live-dot"></span> Live Activity <span id="liveFeedUpdated" class="ui-meta" style="margin-left:8px;"></span><?php echo $current_weather_str; ?></h3>
+    <h3 style="display:flex; align-items:center; width:100%;"><span class="live-dot"></span> Live Activity <span id="liveFeedUpdated" class="ui-meta" style="margin-left:8px;"></span><?php echo $current_weather_str ?: "<span id='liveFeedWeather' style='margin-left:auto; font-size:0.9em; font-weight:normal; color:var(--text-secondary, #6b7280);'></span>"; ?></h3>
     <ul class="feed-list" id="liveFeedList">
       <li style="padding:12px 0; text-align:center; color: var(--text-secondary, #6b7280);">Loading...</li>
     </ul>
   </div>
 
   <script>
+  function liveFeedWeatherEmoji(code, isDay) {
+    code = Number(code);
+    isDay = Number(isDay) !== 0;
+    if (code === 0) return isDay ? '\u2600\ufe0f' : '\ud83c\udf19';
+    if (code >= 1 && code <= 3) return isDay ? '\u26c5' : '\u2601\ufe0f';
+    if (code === 45 || code === 48) return '\ud83c\udf2b\ufe0f';
+    if (code >= 51 && code <= 55) return isDay ? '\ud83c\udf26\ufe0f' : '\ud83c\udf27\ufe0f';
+    if (code >= 61 && code <= 65) return '\ud83c\udf27\ufe0f';
+    if (code >= 71 && code <= 75) return '\u2744\ufe0f';
+    if (code >= 80 && code <= 82) return isDay ? '\ud83c\udf26\ufe0f' : '\ud83c\udf27\ufe0f';
+    if (code >= 95) return '\u26c8\ufe0f';
+    return '\u2601\ufe0f';
+  }
+
+  function refreshLiveWeather() {
+    fetch('/api/v1/weather/current?_=' + Date.now(), { headers: { 'Accept': 'application/json' } })
+      .then(r => {
+        if (!r.ok) throw new Error('Weather request failed');
+        return r.json();
+      })
+      .then(data => {
+        if (!data || data.status !== 'current') return;
+        const weather = document.getElementById('liveFeedWeather');
+        if (!weather) return;
+        weather.innerHTML = Math.round(Number(data.temp)) + '&deg;F ' + liveFeedWeatherEmoji(data.condition_code, data.is_day);
+      })
+      .catch(() => {
+        // Keep the last known weather visible during transient API or database failures.
+      });
+  }
+
   function refreshLiveFeed() {
-    fetch('api/v1/detections/recent?limit=6')
-      .then(r => r.json())
+    fetch('api/v1/detections/recent?limit=6&_=' + Date.now(), { headers: { 'Accept': 'application/json' } })
+      .then(r => {
+        if (!r.ok) throw new Error('Recent detections request failed');
+        return r.json();
+      })
       .then(data => {
         const list = document.getElementById('liveFeedList');
         if (!list) return;
@@ -417,12 +451,17 @@ elseif ($config["LONGITUDE"] == "0.000") {
       })
       .catch(() => {
         const list = document.getElementById('liveFeedList');
-        if (list) list.innerHTML = '<li style="padding:8px 0;">' + (window.BirdNETUI ? BirdNETUI.message('error', 'Live feed unavailable', 'Recent detections could not be loaded.') : 'Live feed unavailable.') + '</li>';
+        const hasExistingFeed = list && list.querySelector('.feed-item');
+        if (list && !hasExistingFeed) {
+          list.innerHTML = '<li style="padding:8px 0;">' + (window.BirdNETUI ? BirdNETUI.message('warning', 'Live feed retrying', 'Recent detections could not be loaded yet.') : 'Live feed retrying.') + '</li>';
+        }
       });
   }
   document.addEventListener("DOMContentLoaded", function() {
     refreshLiveFeed();
+    refreshLiveWeather();
     setInterval(refreshLiveFeed, 30000);
+    setInterval(refreshLiveWeather, 60000);
   });
   </script>
 
@@ -431,7 +470,7 @@ elseif ($config["LONGITUDE"] == "0.000") {
 <!--<script type="text/javascript" src="static/moxie.js"></script>
 <script type="text/javascript" src="static/plupload.dev.js"></script>-->
 <script>
-window.onload = function() {
+window.addEventListener('load', function() {
   var elements = document.querySelectorAll("button[name=view]");
 
   var setViewsOpacity = function() {
@@ -441,7 +480,7 @@ window.onload = function() {
   for (var i = 0; i < elements.length; i++) {
       elements[i].addEventListener('click', setViewsOpacity, false);
   }
-};
+});
 var topbuttons = document.querySelectorAll("button[form='views'], .sidebar-nav button[type='submit']");
 if(window.location.search.substr(1) != '') {
   const urlParams = new URLSearchParams(window.location.search);
