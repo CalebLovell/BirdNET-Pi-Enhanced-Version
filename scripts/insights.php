@@ -176,6 +176,21 @@ if ($subview == 'migration' && isset($_GET['seasonal_batch'])) {
     exit;
 }
 
+/* Serve repeat views from the fragment cache. Keyed on the detections
+   watermark so any new detection invalidates it automatically; date/hour keep
+   "today" sections and weather data fresh; the file mtime invalidates after
+   code updates. The seasonal_batch AJAX branch above bypasses this cache. */
+$insights_cache_key = birdnet_cache_key(
+    'insights', $subview, $seasonal_species_offset, $migration_list_limit,
+    date('Y-m-d'), date('G'), detections_watermark(), filemtime(__FILE__)
+);
+$insights_cached = birdnet_cache_get($insights_cache_key);
+if ($insights_cached !== false) {
+    echo $insights_cached;
+    return;
+}
+ob_start();
+
 if ($subview == 'dashboard') {
     $lifetime_species = db_query_single_safe($db, 'SELECT COUNT(DISTINCT(Sci_Name)) FROM detections', 0, 'insights lifetime species') ?: 0;
     if ($best_day_row = db_query_one_safe($db, 'SELECT Date, COUNT(*) as cnt FROM detections GROUP BY Date ORDER BY cnt DESC LIMIT 1', 'insights best day')) {
@@ -1833,3 +1848,9 @@ document.addEventListener('DOMContentLoaded', function() {
     <?php endif; ?>
 });
 </script>
+
+<?php
+// Save the rendered fragment for the cache key computed above (Phase 0 cache).
+birdnet_cache_put($insights_cache_key, ob_get_contents());
+ob_end_flush();
+?>

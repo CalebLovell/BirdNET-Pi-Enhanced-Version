@@ -1,6 +1,8 @@
 <?php
 
-define('__ROOT__', dirname(dirname(__FILE__)));
+if (!defined('__ROOT__')) {
+  define('__ROOT__', dirname(dirname(__FILE__)));
+}
 
 if (session_status() !== PHP_SESSION_ACTIVE)
   session_start();
@@ -686,4 +688,42 @@ function get_color_scheme(){
   } else {
     return 'style.css';
   }
+}
+
+/* ===== Lightweight file cache (Phase 0) =====
+   Rendered fragments and computed aggregates are keyed on the detections
+   watermark (MAX rowid), so any new detection invalidates them automatically. */
+
+function birdnet_cache_dir() {
+  $dir = sys_get_temp_dir() . '/birdnet_cache';
+  if (!is_dir($dir)) {
+    @mkdir($dir, 0777, true);
+  }
+  return $dir;
+}
+
+function detections_watermark() {
+  static $watermark = null;
+  if ($watermark === null) {
+    $db = get_db();
+    $watermark = (string) db_query_single_safe($db, 'SELECT MAX(rowid) FROM detections', 0, 'cache watermark');
+  }
+  return $watermark;
+}
+
+function birdnet_cache_key(...$parts) {
+  return 'bnp_' . md5(implode('|', array_map('strval', $parts)));
+}
+
+function birdnet_cache_get($key, $max_age = 21600) {
+  $file = birdnet_cache_dir() . '/' . $key . '.cache';
+  if (!is_file($file) || (time() - @filemtime($file)) > $max_age) {
+    return false;
+  }
+  $data = @file_get_contents($file);
+  return $data === false ? false : $data;
+}
+
+function birdnet_cache_put($key, $content) {
+  @file_put_contents(birdnet_cache_dir() . '/' . $key . '.cache', $content, LOCK_EX);
 }

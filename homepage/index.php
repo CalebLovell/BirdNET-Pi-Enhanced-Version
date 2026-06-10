@@ -7,47 +7,6 @@ if (strpos($requestUri, '/api/v1/') === 0) {
   die();
 }
 
-/* Prevent XSS input */
-$_GET   = filter_input_array(INPUT_GET, FILTER_SANITIZE_FULL_SPECIAL_CHARS) ?: [];
-$_POST  = filter_input_array(INPUT_POST, FILTER_SANITIZE_FULL_SPECIAL_CHARS) ?: [];
-require_once 'scripts/common.php';
-$config = get_config();
-$site_name = get_sitename();
-$color_scheme = get_color_scheme();
-set_timezone();
-if (isset($_GET['view']) && is_protected_view($_GET['view'])) {
-  ensure_authenticated();
-}
-
-?>
-<!DOCTYPE html>
-<html lang="en">
-<head>
-<script>
-  if (localStorage.getItem('birdnet-theme') === 'dark') {
-    document.documentElement.setAttribute('data-theme', 'dark');
-  }
-</script>
-<title><?php echo $site_name; ?></title>
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<meta name="description" content="BirdNET-Pi - Bird sound identification and monitoring dashboard">
-<link id="iconLink" rel="shortcut icon" sizes=85x85 href="images/bird.png" />
-<link rel="stylesheet" href="<?php echo $color_scheme . '?v=' . date('n.d.y', filemtime($color_scheme)); ?>">
-<link rel="stylesheet" type="text/css" href="static/dialog-polyfill.css" />
-</head>
-<body>
-
-
-
-<?php
-if(isset($_GET['filename'])) {
-  $filename = $_GET['filename'];
-  $query = $_SERVER['QUERY_STRING'];
-echo "
-<iframe src=\"views.php?" . h($query) . "\" allow=\"autoplay\" style=\"position: fixed; top: 0; left: 0; width: 100%; height: 100%; border: none; z-index: 1;\"></iframe>";
-} else {
-  $query = $_SERVER['QUERY_STRING'];
-  echo "
-<iframe src=\"views.php?" . h($query) . "\" allow=\"autoplay\" style=\"position: fixed; top: 0; left: 0; width: 100%; height: 100%; border: none; z-index: 1;\"></iframe>";
-}
-?>
+// The UI shell renders directly. The legacy full-page iframe wrapper was removed
+// so URLs, browser history, bookmarks, and deep links behave like a normal site.
+include 'views.php';

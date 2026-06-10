@@ -1403,7 +1403,8 @@ dialog::backdrop {
   font-size: small;
 }
 
-form#views button .updatenumber {
+form#views button .updatenumber,
+.sidebar-nav a .updatenumber {
   position: initial;
   margin-left: 0px;
 }
@@ -2074,14 +2075,16 @@ pre#timer.bash {
   max-width: 45px;
 }
 
-.sidebar.collapsed .sidebar-nav button {
+.sidebar.collapsed .sidebar-nav button,
+.sidebar.collapsed .sidebar-nav a {
   padding: 12px 0;
   justify-content: center;
   border-left-width: 0;
   border-bottom: 3px solid transparent;
 }
 
-.sidebar.collapsed .sidebar-nav button span {
+.sidebar.collapsed .sidebar-nav button span,
+.sidebar.collapsed .sidebar-nav a span {
   display: none;
 }
 
@@ -2092,6 +2095,7 @@ pre#timer.bash {
 }
 
 .sidebar.collapsed .sidebar-nav button.active,
+.sidebar.collapsed .sidebar-nav a.active,
 .sidebar.collapsed .sidebar-nav .button-hover {
   border-bottom: 3px solid #2563eb;
   background-color: #eff6ff;
@@ -2152,9 +2156,11 @@ pre#timer.bash {
   overflow-y: auto;
 }
 
-.sidebar-nav button {
+.sidebar-nav button,
+.sidebar-nav a {
   display: flex;
   align-items: center;
+  gap: 10px;
   background: none;
   border: none;
   padding: 12px 24px;
@@ -2165,18 +2171,26 @@ pre#timer.bash {
   transition: all 0.2s ease;
   border-left: 3px solid transparent;
   width: 100%;
+  text-decoration: none;
 }
 
-.sidebar-nav button:hover {
+.sidebar-nav button:hover,
+.sidebar-nav a:hover {
   background-color: var(--bg-button-hover);
   color: var(--text-primary);
+  font-weight: normal;
 }
 
 .sidebar-nav button.active,
+.sidebar-nav a.active,
 .sidebar-nav .button-hover {
   background-color: #eff6ff;
   color: #2563eb;
   border-left: 3px solid #2563eb;
+  font-weight: 500;
+}
+
+.sidebar-nav a.active:hover {
   font-weight: 500;
 }
 
@@ -2197,17 +2211,20 @@ pre#timer.bash {
   flex-direction: column;
 }
 
-.sidebar-dropdown-content button {
+.sidebar-dropdown-content button,
+.sidebar-dropdown-content a {
   padding: 10px 24px 10px 48px !important;
   font-size: 0.9em !important;
   border-left: 2px solid transparent !important;
 }
 
-.sidebar-dropdown-content button:hover {
+.sidebar-dropdown-content button:hover,
+.sidebar-dropdown-content a:hover {
   background-color: rgba(99, 102, 241, 0.05) !important;
 }
 
-.sidebar-dropdown-content button.active {
+.sidebar-dropdown-content button.active,
+.sidebar-dropdown-content a.active {
   color: var(--accent) !important;
   background-color: var(--accent-subtle) !important;
   border-left: 2px solid var(--accent) !important;

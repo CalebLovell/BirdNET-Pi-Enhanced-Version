@@ -284,6 +284,13 @@ sqlite3 $HOME/BirdNET-Pi/scripts/birds.db << EOF
 CREATE INDEX IF NOT EXISTS "detections_Sci_Name" ON "detections" ("Sci_Name");
 EOF
 
+# Re-link homepage files into the web root so files added after the original
+# install (e.g. styleguide.php) become reachable on updated systems.
+# -n replaces existing directory symlinks instead of descending into them.
+for homepage_entry in $HOME/BirdNET-Pi/homepage/*; do
+  sudo_with_user ln -fsn "$homepage_entry" "${EXTRACTED}/$(basename "$homepage_entry")"
+done
+
 # update snippets above
 
 systemctl daemon-reload

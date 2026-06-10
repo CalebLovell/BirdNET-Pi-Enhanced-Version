@@ -21,6 +21,7 @@ if(isset($_GET['view']) && $_GET['view'] == "Species" && (isset($_GET['ajax_spec
 $restore = "cat $home/BirdSongs/restore.log";
 
 if(is_authenticated() && (!isset($_SESSION['behind']) || !isset($_SESSION['behind_time']) || time() > $_SESSION['behind_time'] + 86400)) {
+  $num_commits_behind = '0';
   shell_exec("sudo -u".$user." git -C ".$home."/BirdNET-Pi fetch > /dev/null 2>/dev/null &");
   $str = trim(shell_exec("sudo -u".$user." git -C ".$home."/BirdNET-Pi status"));
   if (preg_match("/behind '.*?' by (\d+) commit(s?)\b/", $str, $matches)) {
@@ -37,115 +38,71 @@ if(is_authenticated() && (!isset($_SESSION['behind']) || !isset($_SESSION['behin
   $_SESSION['behind'] = $num_commits_behind;
   $_SESSION['behind_time'] = time();
 }
-if(isset($_SESSION['behind'])&&intval($_SESSION['behind']) >= 99) {?>
-  <style>
-  .updatenumber { 
-    width:30px !important;
-  }
-  </style>
-<?php }
+$setup_warning = "";
 if ($config["LATITUDE"] == "0.000" && $config["LONGITUDE"] == "0.000") {
-  echo "<center style='color:red'><b>WARNING: Your latitude and longitude are not set properly. Please do so now in Tools -> Settings.</center></b>";
+  $setup_warning = "Your latitude and longitude are not set properly. Please do so now in Tools -> Settings.";
 }
 elseif ($config["LATITUDE"] == "0.000") {
-  echo "<center style='color:red'><b>WARNING: Your latitude is not set properly. Please do so now in Tools -> Settings.</center></b>";
+  $setup_warning = "Your latitude is not set properly. Please do so now in Tools -> Settings.";
 }
 elseif ($config["LONGITUDE"] == "0.000") {
-  echo "<center style='color:red'><b>WARNING: Your longitude is not set properly. Please do so now in Tools -> Settings.</center></b>";
+  $setup_warning = "Your longitude is not set properly. Please do so now in Tools -> Settings.";
+}
+
+$site_name = get_sitename();
+$current_view = isset($_GET['view']) ? $_GET['view'] : 'Overview';
+$current_subview = isset($_GET['subview']) ? $_GET['subview'] : '';
+if (is_protected_view($current_view)) {
+  ensure_authenticated();
+}
+$page_title = $current_view === 'Overview' ? $site_name : $current_view . ' · ' . $site_name;
+
+$updatediv = "";
+if (isset($_SESSION['behind']) && intval($_SESSION['behind']) >= 50 && ($config['SILENCE_UPDATE_INDICATOR'] != 1)) {
+  $updatediv = ' <div class="updatenumber">'.$_SESSION["behind"].'</div>';
+}
+
+function nav_icon($name) {
+  return '<svg class="nav-icon" aria-hidden="true" focusable="false"><use href="static/icons.svg#' . $name . '"></use></svg>';
 }
 ?>
 <!DOCTYPE html>
 <html lang="en">
 <head>
   <script>
-    if (localStorage.getItem('birdnet-theme') === 'dark') {
-      document.documentElement.setAttribute('data-theme', 'dark');
-    }
+    (function () {
+      var theme = localStorage.getItem('birdnet-theme');
+      if (!theme && window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) {
+        theme = 'dark';
+      }
+      if (theme === 'dark') {
+        document.documentElement.setAttribute('data-theme', 'dark');
+      }
+    })();
   </script>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>BirdNET-Pi DB</title>
+  <meta name="description" content="BirdNET-Pi - Bird sound identification and monitoring dashboard">
+  <title><?php echo h($page_title); ?></title>
+  <link id="iconLink" rel="shortcut icon" sizes="85x85" href="images/bird.png">
   <link rel="stylesheet" href="<?php echo $color_scheme . '?v=' . date('n.d.y', filemtime($color_scheme)); ?>">
+  <link rel="stylesheet" href="static/css/tokens.css?v=<?php echo filemtime('static/css/tokens.css'); ?>">
+  <link rel="stylesheet" href="static/css/shell.css?v=<?php echo filemtime('static/css/shell.css'); ?>">
+  <link rel="stylesheet" type="text/css" href="static/dialog-polyfill.css">
   <script src="static/ui-helpers.js?v=<?php echo date('n.d.y', filemtime('static/ui-helpers.js')); ?>" defer></script>
+  <?php if (isset($_SESSION['behind']) && intval($_SESSION['behind']) >= 99) { ?>
+  <style>
+    .updatenumber {
+      width: 30px !important;
+    }
+  </style>
+  <?php } ?>
 </head>
 <body>
-<style>
-  #live-audio-panel {
-    position: fixed;
-    top: 0;
-    right: 0;
-    transform: translateX(100%);
-    transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-    z-index: 999999;
-    display: flex;
-    align-items: flex-start;
-    pointer-events: none; /* Let clicks pass through when hidden */
-  }
-  #live-audio-panel.open {
-    transform: translateX(0);
-    pointer-events: auto;
-  }
-  #live-audio-tab {
-    position: absolute;
-    left: -65px;
-    width: 65px;
-    height: 30px; /* Force tab to be vertically smaller as requested */
-    top: 0;
-    background: var(--bg-card, #fff);
-    border: 1px solid var(--border, #ccc);
-    border-top: none;
-    border-right: none;
-    border-radius: 0 0 0 8px;
-    box-shadow: -2px 2px 6px rgba(0,0,0,0.1);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    cursor: pointer;
-    font-size: 0.85em;
-    font-weight: bold;
-    color: var(--text-primary, #333);
-    user-select: none;
-    pointer-events: auto; /* Tab always clickable */
-  }
-  #live-audio-tab:hover {
-    background: var(--bg-button-hover, #f1f5f9);
-  }
-  #live-audio-content {
-    background: var(--bg-card, #fff);
-    border: 1px solid var(--border, #ccc);
-    border-top: none;
-    border-right: none;
-    border-radius: 0 0 0 8px;
-    box-shadow: -4px 4px 12px rgba(0,0,0,0.15);
-    padding: 2px 10px;
-    display: flex;
-    align-items: center;
-    visibility: hidden;
-    opacity: 0;
-    transition: opacity 0.3s ease, visibility 0.3s;
-  }
-  #live-audio-panel.open #live-audio-content {
-    visibility: visible;
-    opacity: 1;
-  }
-  #live-audio-player {
-    height: 36px;
-    outline: none;
-  }
-  @media (max-width: 1000px) {
-    #live-audio-panel {
-      top: 56px; /* Offset to be directly below the mobile header */
-    }
-    #live-audio-tab {
-      border-top: 1px solid var(--border, #ccc);
-      border-radius: 8px 0 0 8px;
-    }
-  }
-</style>
 <div id="live-audio-panel" onmouseleave="startCloseTimer()" onmouseenter="cancelCloseTimer()">
-  <div id="live-audio-tab" onclick="toggleAudioPanel()">
+  <button type="button" id="live-audio-tab" onclick="toggleAudioPanel()" aria-label="Toggle live audio stream player" aria-expanded="false">
     🎙️ Live
-  </div>
+  </button>
   <div id="live-audio-content">
     <audio id="live-audio-player" controls preload="none">
       <source src="/stream">
@@ -155,7 +112,9 @@ elseif ($config["LONGITUDE"] == "0.000") {
 <script>
   let audioPanelTimer;
   function toggleAudioPanel() {
-    document.getElementById('live-audio-panel').classList.toggle('open');
+    const panel = document.getElementById('live-audio-panel');
+    const isOpen = panel.classList.toggle('open');
+    document.getElementById('live-audio-tab').setAttribute('aria-expanded', isOpen ? 'true' : 'false');
   }
   function startCloseTimer() {
     audioPanelTimer = setTimeout(() => {
@@ -168,48 +127,69 @@ elseif ($config["LONGITUDE"] == "0.000") {
 </script>
 <div class="mobile-header">
   <div class="sidebar-logo">
-    <img src="images/bnp.png" alt="Logo">
+    <img src="images/bnp.png" alt="BirdNET-Pi logo">
   </div>
-  <button type="button" class="icon" onclick="myFunction()"><img src="images/menu.png"></button>
+  <button type="button" class="icon" onclick="myFunction()" aria-label="Toggle navigation menu"><img src="images/menu.png" alt=""></button>
 </div>
-<form action="index.php" method="GET" id="views" target="_top">
-<input type="hidden" name="subview" id="sidebar_subview" value="">
 <div class="sidebar" id="mySidebar">
   <div class="sidebar-header">
     <div class="sidebar-logo">
-      <img src="images/bnp.png" alt="Logo">
+      <img src="images/bnp.png" alt="BirdNET-Pi logo">
     </div>
-    <button type="button" class="sidebar-toggle" onclick="myFunction()">«</button>
+    <button type="button" class="sidebar-toggle" onclick="myFunction()" aria-label="Toggle sidebar">«</button>
   </div>
-  <div class="sidebar-nav">
-    <button type="submit" name="view" value="Overview" form="views" onclick="document.getElementById('sidebar_subview').value='';">🏠 <span>Overview</span></button>
-    <button type="submit" name="view" value="Analytics" form="views" onclick="document.getElementById('sidebar_subview').value='';">📈 <span>Analytics</span></button>
-    <button type="submit" name="view" value="Species" form="views" onclick="document.getElementById('sidebar_subview').value='';">🐧 <span>Species</span></button>
-    <div class="sidebar-dropdown">
-      <button type="button" class="sidebar-dropdown-toggle">🧬 <span>Insights</span> <span class="dropdown-arrow">▼</span></button>
-      <div class="sidebar-dropdown-content">
-        <button type="submit" name="view" value="Insights" data-subview="dashboard" onclick="document.getElementById('sidebar_subview').value='dashboard';">🏠 <span>Dashboard</span></button>
-        <button type="submit" name="view" value="Insights" data-subview="behavior" onclick="document.getElementById('sidebar_subview').value='behavior';">🕐 <span>Behavior</span></button>
-        <button type="submit" name="view" value="Insights" data-subview="migration" onclick="document.getElementById('sidebar_subview').value='migration';">🦅 <span>Migration</span></button>
-        <button type="submit" name="view" value="Insights" data-subview="environmental" onclick="document.getElementById('sidebar_subview').value='environmental';">🌤️ <span>Weather</span></button>
-        <button type="submit" name="view" value="Insights" data-subview="health" onclick="document.getElementById('sidebar_subview').value='health';">🔍 <span>Health</span></button>
-        <button type="submit" name="view" value="Insights" data-subview="forecasting" onclick="document.getElementById('sidebar_subview').value='forecasting';">🔮 <span>Trends & Forecasting</span></button>
-        <button type="submit" name="view" value="Insights" data-subview="report" onclick="document.getElementById('sidebar_subview').value='report';">📰 <span>Reports</span></button>
-      </div>
-    </div>
-    <button type="submit" name="view" value="Recordings" form="views" onclick="document.getElementById('sidebar_subview').value='';">🎵 <span>Recordings</span></button>
-    <button type="submit" name="view" value="Spectrogram" form="views" onclick="document.getElementById('sidebar_subview').value='';">📊 <span>Spectrogram</span></button>
-    <button type="submit" name="view" value="View Log" form="views" onclick="document.getElementById('sidebar_subview').value='';">📝 <span>Log</span></button>
-    <button type="submit" name="view" value="Tools" form="views" onclick="document.getElementById('sidebar_subview').value='';">⚙️ <span>Tools</span><?php if(isset($_SESSION['behind']) && intval($_SESSION['behind']) >= 50 && ($config['SILENCE_UPDATE_INDICATOR'] != 1)){ $updatediv = ' <div class="updatenumber">'.$_SESSION["behind"].'</div>'; } else { $updatediv = ""; } echo $updatediv; ?></button>
-    <button type="button" id="themeToggleBtn" onclick="toggleTheme()"><span id="theme-toggle-icon">🌗</span> <span id="theme-toggle-text">Theme</span></button>
+  <nav class="sidebar-nav" aria-label="Main navigation">
+<?php
+$insights_subviews = [
+  ['dashboard', 'grid', 'Dashboard'],
+  ['behavior', 'clock', 'Behavior'],
+  ['migration', 'send', 'Migration'],
+  ['environmental', 'cloud', 'Weather'],
+  ['health', 'search', 'Health'],
+  ['forecasting', 'trending-up', 'Trends & Forecasting'],
+  ['report', 'file-text', 'Reports'],
+];
+$main_nav = [
+  ['Overview', 'home', 'Overview'],
+  ['Analytics', 'chart', 'Analytics'],
+  ['Species', 'bird', 'Species'],
+  'INSIGHTS',
+  ['Recordings', 'music', 'Recordings'],
+  ['Spectrogram', 'activity', 'Spectrogram'],
+  ['View Log', 'file-text', 'Log'],
+  ['Tools', 'sliders', 'Tools'],
+];
+foreach ($main_nav as $nav_item) {
+  if ($nav_item === 'INSIGHTS') {
+    $insights_open = ($current_view === 'Insights');
+    $effective_subview = $current_subview === '' ? 'dashboard' : $current_subview;
+    echo '<div class="sidebar-dropdown' . ($insights_open ? ' open' : '') . '">';
+    echo '<button type="button" class="sidebar-dropdown-toggle" aria-expanded="' . ($insights_open ? 'true' : 'false') . '">' . nav_icon('zap') . ' <span>Insights</span> <span class="dropdown-arrow" aria-hidden="true">&#9660;</span></button>';
+    echo '<div class="sidebar-dropdown-content">';
+    foreach ($insights_subviews as $sv) {
+      $sv_active = $insights_open && $effective_subview === $sv[0];
+      echo '<a href="?view=Insights&amp;subview=' . $sv[0] . '"' . ($sv_active ? ' class="active" aria-current="page"' : '') . '>' . nav_icon($sv[1]) . ' <span>' . h($sv[2]) . '</span></a>';
+    }
+    echo '</div></div>';
+    continue;
+  }
+  $is_active = ($current_view === $nav_item[0]);
+  $extra = ($nav_item[0] === 'Tools') ? $updatediv : '';
+  echo '<a href="?view=' . rawurlencode($nav_item[0]) . '"' . ($is_active ? ' class="active" aria-current="page"' : '') . '>' . nav_icon($nav_item[1]) . ' <span>' . h($nav_item[2]) . '</span>' . $extra . '</a>';
+}
+?>
+    <button type="button" id="themeToggleBtn" onclick="toggleTheme()"><span id="theme-toggle-icon" aria-hidden="true">🌗</span> <span id="theme-toggle-text">Theme</span></button>
     <script>
-      // Dropdown Toggle Logic
+      // Dropdown + theme toggle wiring; nav active states are rendered server-side.
       document.addEventListener('DOMContentLoaded', function() {
         const dropdown = document.querySelector('.sidebar-dropdown');
         const toggle = dropdown.querySelector('.sidebar-dropdown-toggle');
-        const urlParams = new URLSearchParams(window.location.search);
-        
-        // Initialize Theme Toggle Icon and Text
+        toggle.addEventListener('click', function(e) {
+          e.preventDefault();
+          const isOpen = dropdown.classList.toggle('open');
+          toggle.setAttribute('aria-expanded', isOpen ? 'true' : 'false');
+        });
+
         const isDark = document.documentElement.getAttribute('data-theme') === 'dark';
         const themeIcon = document.getElementById('theme-toggle-icon');
         const themeText = document.getElementById('theme-toggle-text');
@@ -219,33 +199,13 @@ elseif ($config["LONGITUDE"] == "0.000") {
         if (themeText) {
           themeText.innerText = isDark ? 'Light Mode' : 'Dark Mode';
         }
-        
-        // Toggle on click
-        toggle.addEventListener('click', function(e) {
-          e.preventDefault();
-          dropdown.classList.toggle('open');
-        });
-
-        // Keep open if on Insights page
-        if (urlParams.get('view') === 'Insights') {
-          dropdown.classList.add('open');
-          // Highlight active sub-button
-          const subview = urlParams.get('subview') || 'dashboard';
-          const subBtn = dropdown.querySelector(`button[data-subview="${subview}"]`);
-          if (subBtn) subBtn.classList.add('active');
-        }
       });
 
-      // Dark Mode Toggle Logic
       function toggleTheme() {
         const isDark = document.documentElement.getAttribute('data-theme') === 'dark';
         const newTheme = isDark ? 'light' : 'dark';
-        
-        // Update local localStorage and document
         localStorage.setItem('birdnet-theme', newTheme);
         document.documentElement.setAttribute('data-theme', newTheme);
-        
-        // Update icon and text
         const themeIcon = document.getElementById('theme-toggle-icon');
         const themeText = document.getElementById('theme-toggle-text');
         if (themeIcon) {
@@ -254,97 +214,10 @@ elseif ($config["LONGITUDE"] == "0.000") {
         if (themeText) {
           themeText.innerText = newTheme === 'dark' ? 'Light Mode' : 'Dark Mode';
         }
-        
-        // If this page is inside top index.php iframe, update the parent as well
-        if (window.top !== window.self) {
-          window.top.document.documentElement.setAttribute('data-theme', newTheme);
-        }
       }
     </script>
-  </div>
-</form>
+  </nav>
 
-  <style>
-  .sidebar-feed {
-    flex-grow: 1;
-    display: flex;
-    flex-direction: column;
-    padding: 15px 20px;
-    overflow: hidden;
-    border-top: 1px solid var(--border);
-    background: var(--bg-card);
-  }
-  .sidebar-feed h3 {
-    margin: 0 0 10px 0;
-    font-size: 0.9em;
-    color: var(--text-heading);
-    display: flex;
-    align-items: center;
-    gap: 8px;
-  }
-  .sidebar-feed h3 .live-dot {
-    width: 8px; height: 8px;
-    background: #22c55e;
-    border-radius: 50%;
-    animation: pulse-dot 2s infinite;
-  }
-  @keyframes pulse-dot {
-    0%, 100% { opacity: 1; }
-    50% { opacity: 0.3; }
-  }
-  .feed-list {
-    list-style: none;
-    padding: 0;
-    margin: 0;
-    overflow-y: auto;
-    flex-grow: 1;
-    /* Custom scrollbar for a cleaner look */
-    scrollbar-width: thin;
-    scrollbar-color: var(--border) transparent;
-  }
-  .feed-list::-webkit-scrollbar {
-    width: 4px;
-  }
-  .feed-list::-webkit-scrollbar-thumb {
-    background-color: var(--border);
-    border-radius: 4px;
-  }
-  .feed-item {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    padding: 6px 0;
-    border-bottom: 1px solid var(--border-light, #f1f5f9);
-    font-size: 0.8em;
-  }
-  .feed-item:last-child { border-bottom: none; }
-  .feed-species {
-    font-weight: 600;
-    color: var(--text-primary, #1f2937);
-    flex: 1;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-  }
-  .feed-badge {
-    display: inline-block;
-    padding: 2px 5px;
-    border-radius: 8px;
-    font-size: 0.7em;
-    font-weight: 700;
-    margin: 0 6px;
-    min-width: 32px;
-    text-align: center;
-  }
-  .feed-badge.high { background: #dcfce7; color: #166534; }
-  .feed-badge.med  { background: #fef9c3; color: #854d0e; }
-  .feed-badge.low  { background: #fee2e2; color: #991b1b; }
-  .feed-time {
-    font-size: 0.75em;
-    color: var(--text-secondary, #6b7280);
-    white-space: nowrap;
-  }
-  </style>
 
   <div class="sidebar-feed">
   <?php
@@ -469,7 +342,7 @@ elseif ($config["LONGITUDE"] == "0.000") {
 <script type="text/javascript" src="static/plupload.dev.js"></script>-->
 <script>
 window.addEventListener('load', function() {
-  var elements = document.querySelectorAll("button[name=view]");
+  var elements = document.querySelectorAll(".sidebar-nav a");
 
   var setViewsOpacity = function() {
       document.getElementsByClassName("views")[0].style.opacity = "0.5";
@@ -479,29 +352,6 @@ window.addEventListener('load', function() {
       elements[i].addEventListener('click', setViewsOpacity, false);
   }
 });
-var topbuttons = document.querySelectorAll("button[form='views'], .sidebar-nav button[type='submit']");
-if(window.location.search.substr(1) != '') {
-  const urlParams = new URLSearchParams(window.location.search);
-  const currentView = urlParams.get('view');
-  const currentSubview = urlParams.get('subview');
-
-  for (var i = 0; i < topbuttons.length; i++) {
-    const btnView = topbuttons[i].value;
-    const btnSubview = topbuttons[i].dataset.subview;
-
-    if (btnView === currentView) {
-      if (currentView === 'Insights') {
-        if (btnSubview === currentSubview || (!currentSubview && btnSubview === 'dashboard')) {
-          topbuttons[i].classList.add("button-hover");
-        }
-      } else {
-        topbuttons[i].classList.add("button-hover");
-      }
-    }
-  }
-} else {
-  topbuttons[0].classList.add("button-hover");
-}
 function copyOutput(elem) {
   elem.innerHTML = 'Copied!';
   const copyText = document.getElementsByTagName("pre")[0].textContent;
@@ -517,6 +367,10 @@ function copyOutput(elem) {
 
 <div class="views">
 <?php
+if ($setup_warning !== "") {
+  echo '<div class="ui-message ui-message-warning" role="alert" style="max-width:900px;margin:0 auto 16px;"><strong>Setup needed</strong><span>' . h($setup_warning) . '</span></div>';
+}
+
 function update_species_list($filename, $species, $add) {
     if($add){
         $str = file_get_contents($filename);
@@ -659,6 +513,7 @@ if(isset($_GET['view'])){
     ensure_authenticated('You cannot access the web terminal');
     echo "<iframe src='terminal'></iframe>";
   }
+  if($_GET['view'] == "Styleguide"){include('styleguide.php');}
 } elseif(isset($_GET['submit'])) {
   ensure_authenticated();
   $allowedCommands = array('sudo systemctl stop livestream.service && sudo systemctl stop icecast2.service',
@@ -806,14 +661,14 @@ function myFunction() {
   }
 }
 function setLiveStreamVolume(vol) {
-  var parentAudioElements = window.parent.document.getElementsByTagName("audio");
+  var parentAudioElements = document.getElementsByTagName("audio");
   if (parentAudioElements.length > 0) {
     parentAudioElements[0].volume = vol;
   }
 }
 window.onbeforeunload = function(event) {
   // if the user is playing a video and then navigates away mid-play, the live stream audio should be unmuted again
-  var parentAudioElements = window.parent.document.getElementsByTagName("audio");
+  var parentAudioElements = document.getElementsByTagName("audio");
   if (parentAudioElements.length > 0) {
     parentAudioElements[0].volume = 1;
   }
@@ -834,53 +689,53 @@ function getTheDate(increment) {
 }
 
 function installKeyAndSwipeEventHandler() {
-  for (var i = 0; i < topbuttons.length; i++) {
-    if (topbuttons[i].textContent == "📅 Charts" && 
-        topbuttons[i].className == "button-hover") {
+  var urlParams = new URLSearchParams(window.location.search);
+  if (urlParams.get('view') !== 'Daily Charts') {
+    return;
+  }
 
-      document.onkeydown = function(event) {
-        switch (event.keyCode) {
-          case 37: //Left key
-            getTheDate(-1);
-            break;
-          case 39: //Right key
-            getTheDate(+1);
-            break;
-        }
-      };
+  document.onkeydown = function(event) {
+    switch (event.keyCode) {
+      case 37: //Left key
+        getTheDate(-1);
+        break;
+      case 39: //Right key
+        getTheDate(+1);
+        break;
+    }
+  };
 
-      // https://stackoverflow.com/questions/2264072/detect-a-finger-swipe-through-javascript-on-the-iphone-and-android
-      let touchstartX = 0;
-      let diffX = 0;
-      let touchstartY = 0;
-      let diffY = 0;
-      let startTime = 0;
-      let diffTime = 0;
-    
-      function checkDirection() {
-        if (Math.abs(diffX) > Math.abs(diffY) && diffTime < 350) {
-          if (diffX > 20) getTheDate(+1);
-          if (diffX < -20) getTheDate(-1);
-        }
-      }
+  // https://stackoverflow.com/questions/2264072/detect-a-finger-swipe-through-javascript-on-the-iphone-and-android
+  let touchstartX = 0;
+  let diffX = 0;
+  let touchstartY = 0;
+  let diffY = 0;
+  let startTime = 0;
+  let diffTime = 0;
 
-      document.addEventListener('touchstart', e => {
-        touchstartX = e.changedTouches[0].screenX;
-        touchstartY = e.changedTouches[0].screenY;
-        startTime = Date.now();
-      });
-
-      document.addEventListener('touchend', e => {
-        diffX = touchstartX - e.changedTouches[0].screenX;
-        diffY = touchstartY - e.changedTouches[0].screenY;
-        diffTime = Date.now() - startTime;
-        checkDirection();
-      });
+  function checkDirection() {
+    if (Math.abs(diffX) > Math.abs(diffY) && diffTime < 350) {
+      if (diffX > 20) getTheDate(+1);
+      if (diffX < -20) getTheDate(-1);
     }
   }
+
+  document.addEventListener('touchstart', e => {
+    touchstartX = e.changedTouches[0].screenX;
+    touchstartY = e.changedTouches[0].screenY;
+    startTime = Date.now();
+  });
+
+  document.addEventListener('touchend', e => {
+    diffX = touchstartX - e.changedTouches[0].screenX;
+    diffY = touchstartY - e.changedTouches[0].screenY;
+    diffTime = Date.now() - startTime;
+    checkDirection();
+  });
 }
 
 installKeyAndSwipeEventHandler();
 </script>
 </div>
 </body>
+</html>
