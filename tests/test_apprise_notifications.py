@@ -1,3 +1,4 @@
+import json
 import os
 import sqlite3
 import unittest
@@ -15,6 +16,11 @@ class TestAppriseNotifications(unittest.TestCase):
 
     def setUp(self):
         db.DB_PATH = self.db_file
+        db._DB = None
+        # In-memory state must not leak between tests
+        notifications.species_last_notified = {}
+        notifications.species_last_detected = {}
+        notifications.SEASONAL_CACHE = "test_seasonal_cache.json"
 
     @classmethod
     def setUpClass(cls):
@@ -58,12 +64,34 @@ class TestAppriseNotifications(unittest.TestCase):
         notifications.APPRISE_CONFIG = self.apprise_config_file
 
     def tearDown(self):
+        if db._DB is not None:
+            db._DB.close()
+            db._DB = None
         if os.path.exists(self.db_file):
             os.remove(self.db_file)
         if os.path.exists(self.apprise_body_file):
             os.remove(self.apprise_body_file)
         if os.path.exists(self.apprise_config_file):
             os.remove(self.apprise_config_file)
+        if os.path.exists("test_seasonal_cache.json"):
+            os.remove("test_seasonal_cache.json")
+
+    def create_species_prefs(self, sci_name, muted=0, notify_mode='default'):
+        conn = sqlite3.connect(self.db_file)
+        cur = conn.cursor()
+        cur.execute("""CREATE TABLE IF NOT EXISTS species_prefs (
+            sci_name text PRIMARY KEY, com_name text,
+            favorite integer DEFAULT 0, muted integer DEFAULT 0,
+            notify_mode text DEFAULT 'default',
+            custom_threshold real, crowned_clip text, updated_at text)""")
+        cur.execute("INSERT OR REPLACE INTO species_prefs (sci_name, muted, notify_mode) VALUES (?,?,?)",
+                    [sci_name, muted, notify_mode])
+        conn.commit()
+        conn.close()
+
+    def create_seasonal_cache(self, sci_name, score):
+        with open("test_seasonal_cache.json", 'w') as f:
+            json.dump({"lat": 50, "lon": 5, "version": 1, "data": {sci_name: [score] * 48}}, f)
 
     def get_default_params(self):
         return {
@@ -124,9 +152,11 @@ class TestAppriseNotifications(unittest.TestCase):
             "A Great Crested Flycatcher (Myiarchus crinitus) was just detected with a confidence of 91 (only seen 1 times in last 7d)"
         )
 
-        # Add each species notification.
+        # Add each species notification. Visit grouping would suppress the
+        # repeat within the same visit, so test the legacy per-chirp mode.
         mock_notify.reset_mock()
         settings_dict["APPRISE_NOTIFY_EACH_DETECTION"] = "1"
+        settings_dict["APPRISE_VISIT_GROUPING"] = "0"
         mock_load_settings.return_value = settings_dict
         sendAppriseNotifications(**self.get_default_params())
 
@@ -140,6 +170,9 @@ class TestAppriseNotifications(unittest.TestCase):
         notifications.DB_PATH = self.db_file
         settings_dict = Settings.with_defaults()
         settings_dict["APPRISE_NOTIFY_EACH_DETECTION"] = "1"
+        # Legacy per-chirp mode: this test exercises the exclude list with
+        # consecutive calls that visit grouping would otherwise suppress.
+        settings_dict["APPRISE_VISIT_GROUPING"] = "0"
 
         settings_dict['APPRISE_ONLY_NOTIFY_SPECIES_NAMES'] = 'Quailfinch'
         mock_load_settings.return_value = settings_dict
@@ -169,6 +202,8 @@ class TestAppriseNotifications(unittest.TestCase):
         notifications.DB_PATH = self.db_file
         settings_dict = Settings.with_defaults()
         settings_dict["APPRISE_NOTIFY_EACH_DETECTION"] = "1"
+        # Legacy per-chirp mode (see test_notifications_excluded)
+        settings_dict["APPRISE_VISIT_GROUPING"] = "0"
 
         settings_dict['APPRISE_ONLY_NOTIFY_SPECIES_NAMES_2'] = 'Quailfinch'
         mock_load_settings.return_value = settings_dict
@@ -187,6 +222,110 @@ class TestAppriseNotifications(unittest.TestCase):
         mock_load_settings.return_value = settings_dict
         sendAppriseNotifications(**self.get_default_params())
         self.assertEqual(mock_notify.call_count, 1)
+
+    @patch('scripts.utils.helpers._load_settings')
+    @patch('scripts.utils.notifications.notify')
+    def test_visit_grouping(self, mock_notify, mock_load_settings):
+        self.create_test_db()
+        self.create_apprise_config()
+        settings_dict = Settings.with_defaults()
+        settings_dict["APPRISE_NOTIFY_EACH_DETECTION"] = "1"
+        mock_load_settings.return_value = settings_dict
+
+        sendAppriseNotifications(**self.get_default_params())
+        self.assertEqual(mock_notify.call_count, 1)
+        self.assertIn("(new visit)", mock_notify.call_args_list[0][0][0])
+
+        # A second detection moments later belongs to the same visit
+        sendAppriseNotifications(**self.get_default_params())
+        self.assertEqual(mock_notify.call_count, 1)
+
+        # Once the quiet gap has passed, the next detection opens a new visit
+        notifications.species_last_detected["Great Crested Flycatcher"] -= 600
+        sendAppriseNotifications(**self.get_default_params())
+        self.assertEqual(mock_notify.call_count, 2)
+
+    @patch('scripts.utils.helpers._load_settings')
+    @patch('scripts.utils.notifications.notify')
+    def test_muted_species(self, mock_notify, mock_load_settings):
+        self.create_test_db()
+        self.create_apprise_config()
+        self.create_species_prefs("Myiarchus crinitus", muted=1)
+        settings_dict = Settings.with_defaults()
+        settings_dict["APPRISE_NOTIFY_EACH_DETECTION"] = "1"
+        mock_load_settings.return_value = settings_dict
+
+        sendAppriseNotifications(**self.get_default_params())
+        self.assertEqual(mock_notify.call_count, 0)
+
+    @patch('scripts.utils.helpers._load_settings')
+    @patch('scripts.utils.notifications.notify')
+    def test_notify_mode_every_visit(self, mock_notify, mock_load_settings):
+        self.create_test_db()
+        self.create_apprise_config()
+        # Per-species mode notifies even with every station-wide rule off
+        self.create_species_prefs("Myiarchus crinitus", notify_mode='every_visit')
+        mock_load_settings.return_value = Settings.with_defaults()
+
+        sendAppriseNotifications(**self.get_default_params())
+        self.assertEqual(mock_notify.call_count, 1)
+        self.assertIn("(new visit)", mock_notify.call_args_list[0][0][0])
+
+        # Same visit: suppressed
+        sendAppriseNotifications(**self.get_default_params())
+        self.assertEqual(mock_notify.call_count, 1)
+
+    @patch('scripts.utils.helpers._load_settings')
+    @patch('scripts.utils.notifications.notify')
+    def test_notify_mode_never(self, mock_notify, mock_load_settings):
+        self.create_test_db()
+        self.create_apprise_config()
+        self.create_species_prefs("Myiarchus crinitus", notify_mode='never')
+        settings_dict = Settings.with_defaults()
+        settings_dict["APPRISE_NOTIFY_EACH_DETECTION"] = "1"
+        mock_load_settings.return_value = settings_dict
+
+        sendAppriseNotifications(**self.get_default_params())
+        self.assertEqual(mock_notify.call_count, 0)
+
+    @patch('scripts.utils.helpers._load_settings')
+    @patch('scripts.utils.notifications.notify')
+    def test_rare_alerts(self, mock_notify, mock_load_settings):
+        self.create_test_db()
+        self.create_apprise_config()
+        settings_dict = Settings.with_defaults()
+        settings_dict["APPRISE_NOTIFY_RARE"] = "1"
+        mock_load_settings.return_value = settings_dict
+
+        # Region-rare: location model expects (almost) none this week
+        self.create_seasonal_cache("Myiarchus crinitus", 0.001)
+        sendAppriseNotifications(**self.get_default_params())
+        self.assertEqual(mock_notify.call_count, 1)
+        self.assertIn("rare for your area this week", mock_notify.call_args_list[0][0][0])
+
+        # Common for the region: falls through to yard rarity (1 lifetime row)
+        mock_notify.reset_mock()
+        notifications.species_last_detected = {}
+        self.create_seasonal_cache("Myiarchus crinitus", 0.9)
+        sendAppriseNotifications(**self.get_default_params())
+        self.assertEqual(mock_notify.call_count, 1)
+        self.assertIn("rare visitor", mock_notify.call_args_list[0][0][0])
+
+    def test_quiet_hours(self):
+        settings = Settings.with_defaults()
+        self.assertFalse(notifications.in_quiet_hours(settings, hour=23))
+
+        settings["APPRISE_QUIET_HOURS_START"] = "22"
+        settings["APPRISE_QUIET_HOURS_END"] = "6"
+        self.assertTrue(notifications.in_quiet_hours(settings, hour=23))
+        self.assertTrue(notifications.in_quiet_hours(settings, hour=2))
+        self.assertFalse(notifications.in_quiet_hours(settings, hour=12))
+
+        # Non-wrapping range
+        settings["APPRISE_QUIET_HOURS_START"] = "9"
+        settings["APPRISE_QUIET_HOURS_END"] = "17"
+        self.assertTrue(notifications.in_quiet_hours(settings, hour=12))
+        self.assertFalse(notifications.in_quiet_hours(settings, hour=20))
 
 
 if __name__ == '__main__':

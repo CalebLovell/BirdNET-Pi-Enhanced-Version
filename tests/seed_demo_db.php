@@ -149,5 +149,15 @@ for ($day = $days; $day >= 0; $day--) {
 }
 $db->exec('COMMIT');
 
-echo "Seeded $total detections across " . ($days + 1) . " days, plus hourly weather.\n";
+// Dev seasonal cache (normally written by get_seasonal_expected.py on the Pi):
+// the location model's expected weekly occurrence per species. The rare
+// arrival gets a near-zero score so region-rare badges/alerts can be tested.
+$seasonal = ['lat' => 40.030, 'lon' => -75.020, 'version' => 1, 'data' => []];
+foreach ($species as $sp) {
+    $score = ($sp[1] === 'Sitta canadensis') ? 0.005 : 0.6;
+    $seasonal['data'][$sp[1]] = array_fill(0, 48, $score);
+}
+file_put_contents(__DIR__ . '/../scripts/seasonal_cache.json', json_encode($seasonal));
+
+echo "Seeded $total detections across " . ($days + 1) . " days, plus hourly weather and a seasonal cache.\n";
 echo "Species: " . count($species) . " (includes a nocturnal owl, a rare new arrival, and a gone-quiet catbird for Insights testing).\n";

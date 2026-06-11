@@ -897,6 +897,52 @@ function get_species_prefs_row($db, $sci_name) {
   return db_fetch_assoc_safe(db_execute_safe($db, $stmt, 'species prefs row'));
 }
 
+/* ===== Two-axis rarity (Phase 4) =====
+   Region-rare: the cached location model (scripts/seasonal_cache.json,
+   written by get_seasonal_expected.py) expects nearly zero occurrence for
+   this species at this location in the current model week.
+   Yard-rare: very few lifetime detections at this particular station. */
+
+define('REGION_RARE_THRESHOLD', 0.05);
+define('YARD_RARE_LIFETIME_MAX', 5);
+
+function seasonal_expected_scores() {
+  static $scores = null;
+  if ($scores === null) {
+    $scores = [];
+    $path = __ROOT__ . '/scripts/seasonal_cache.json';
+    if (is_readable($path)) {
+      $json = json_decode(@file_get_contents($path), true);
+      if (is_array($json) && isset($json['data']) && is_array($json['data'])) {
+        $scores = $json['data'];
+      }
+    }
+  }
+  return $scores;
+}
+
+/* The location model uses 48 "weeks": four segments per month. */
+function birdnet_week($date = null) {
+  $ts = $date ? strtotime($date) : time();
+  $month = (int)date('n', $ts);
+  $day = (int)date('j', $ts);
+  return ($month - 1) * 4 + min(3, intdiv($day - 1, 7)) + 1;
+}
+
+function region_rarity_score_for($sci_name, $week) {
+  $data = seasonal_expected_scores();
+  if (!isset($data[$sci_name]) || !is_array($data[$sci_name])) {
+    return null;
+  }
+  $idx = max(0, min(count($data[$sci_name]) - 1, $week - 1));
+  return isset($data[$sci_name][$idx]) ? (float)$data[$sci_name][$idx] : null;
+}
+
+function is_region_rare($sci_name, $date = null) {
+  $score = region_rarity_score_for($sci_name, birdnet_week($date));
+  return $score !== null && $score < REGION_RARE_THRESHOLD;
+}
+
 /* ===== Crowned clips: purge protection =====
    Extracted clips live at By_Date/<date>/<species dir>/<file>; the species
    dir strips apostrophes and replaces spaces with underscores (classes.py).

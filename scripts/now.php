@@ -54,6 +54,23 @@ function build_todays_story($db) {
     $lines[] = ['icon' => 'search', 'text' => 'Rare visitor' . (count($rare) > 1 ? 's' : '') . ' today: ' . implode(', ', $rare) . ' — worth a listen in Review.'];
   }
 
+  // Region-rare: the location model expects almost none of these here right now
+  if (!empty(seasonal_expected_scores())) {
+    $region_rare = [];
+    $res = db_query_safe($db, "SELECT DISTINCT Sci_Name, Com_Name FROM detections WHERE Date = DATE('now','localtime')", 'story region rare');
+    while ($row = db_fetch_assoc_safe($res)) {
+      if (is_region_rare($row['Sci_Name'])) {
+        $region_rare[] = $row['Com_Name'];
+        if (count($region_rare) >= 3) {
+          break;
+        }
+      }
+    }
+    if (!empty($region_rare)) {
+      $lines[] = ['icon' => 'send', 'text' => 'Unusual for your area at this time of year: ' . implode(', ', $region_rare) . ' — a notable record if it holds up in Review.'];
+    }
+  }
+
   // Volume: only speak when the baseline is meaningful AND deviation is large
   if ($baseline >= 20) {
     $ratio = $today_count / max(1, $baseline);
@@ -213,10 +230,16 @@ $visit_explainer = 'A visit groups repeated detections of the same bird. After '
     var badges = [];
     if (v.is_new_lifetime) {
       badges.push('<span class="hero-badge new">NEW SPECIES</span>');
-    } else if (v.visits_last_7_days <= 2) {
-      badges.push('<span class="hero-badge rare">UNCOMMON VISITOR</span>');
-    } else {
-      badges.push('<span class="hero-badge regular">' + v.visits_last_7_days + ' visits this week</span>');
+    }
+    if (v.region_rare) {
+      badges.push('<span class="hero-badge rare" title="The location model expects almost no occurrence of this species here at this time of year">RARE HERE THIS WEEK</span>');
+    }
+    if (badges.length === 0) {
+      if (v.visits_last_7_days <= 2) {
+        badges.push('<span class="hero-badge rare">UNCOMMON VISITOR</span>');
+      } else {
+        badges.push('<span class="hero-badge regular">' + v.visits_last_7_days + ' visits this week</span>');
+      }
     }
     document.getElementById('heroBadges').innerHTML = badges.join(' ');
 

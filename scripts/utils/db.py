@@ -52,6 +52,28 @@ def get_this_weeks_count_for(sci_name):
     return records[0][0] if records else 0
 
 
+def get_lifetime_count_for(sci_name):
+    select_sql = "SELECT COUNT(*) FROM detections WHERE Sci_Name = ?"
+    records = get_records(select_sql, [sci_name])
+    return records[0][0] if records else 0
+
+
+def get_species_prefs(sci_name):
+    """Per-species notification preferences saved by the web UI.
+
+    The species_prefs table is part of the web data spine and may not exist
+    yet on a given station; missing table or any error simply means
+    "no preferences set", so this never raises and never sleeps.
+    """
+    try:
+        con = get_db()
+        cur = con.execute("SELECT * FROM species_prefs WHERE sci_name = ?", [sci_name])
+        row = cur.fetchone()
+        return dict(row) if row else None
+    except sqlite3.Error:
+        return None
+
+
 def get_summary():
     total_count = get_record("SELECT COUNT(*) as total_count FROM detections")
     todays_count = get_record("SELECT COUNT(*) as todays_count FROM detections WHERE Date == DATE('now', 'localtime')")

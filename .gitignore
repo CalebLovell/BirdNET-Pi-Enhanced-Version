@@ -37,6 +37,7 @@ birdnet/
 templates/*.service
 scripts/*.txt
 scripts/*.db
+scripts/seasonal_cache.json
 analyzing_now.txt
 apprise.txt
 body.txt

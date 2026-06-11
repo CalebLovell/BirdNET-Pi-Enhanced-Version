@@ -19,6 +19,7 @@ require_once 'scripts/common.php';
     <span class="review-progress" id="reviewProgress"></span>
     <span class="review-keys">Keys: <kbd>&darr;</kbd>/<kbd>&uarr;</kbd> move &middot; <kbd>Space</kbd> play &middot; <kbd>Y</kbd> confirm &middot; <kbd>N</kbd> not this bird &middot; <kbd>R</kbd> reassign &middot; <kbd>U</kbd> unsure &middot; <kbd>H</kbd> hide</span>
   </div>
+  <div id="reviewSuggestions"></div>
   <div id="reviewQueue" class="review-queue">
     <div class="ui-skeleton-block" aria-hidden="true">
       <span class="ui-skeleton-line" style="width:90%"></span>
@@ -45,7 +46,13 @@ require_once 'scripts/common.php';
 (function () {
   'use strict';
   var esc = window.BirdNETUI ? BirdNETUI.escapeHtml : function (s) { return String(s == null ? '' : s); };
-  var reasonLabels = { uncertain: 'Uncertain ID', first_lifetime: 'First ever' };
+  var reasonLabels = {
+    uncertain: 'Uncertain ID',
+    first_lifetime: 'First ever',
+    region_rare: 'Rare here this week',
+    yard_rare: 'Rare visitor',
+    low_precision: 'Often misidentified'
+  };
   var queue = [];
   var activeIdx = -1;
   var reviewedCount = 0;
@@ -69,6 +76,7 @@ require_once 'scripts/common.php';
         document.getElementById('reviewQueueMeta').textContent =
           data.total + ' visit' + (data.total === 1 ? '' : 's') + ' to review (last ' + data.days + ' days)';
         updateProgress();
+        renderSuggestions(data.suggestions || []);
         var box = document.getElementById('reviewQueue');
         if (queue.length === 0) {
           box.innerHTML = '<div class="ui-message ui-message-success" role="status"><strong>All caught up</strong><span>Nothing needs review right now.</span></div>';
@@ -112,6 +120,19 @@ require_once 'scripts/common.php';
   function actBtn(i, action, label, key) {
     return '<button type="button" class="review-btn ' + action + '" data-i="' + i + '" data-action="' + action + '">' +
       label + ' <kbd>' + key + '</kbd></button>';
+  }
+
+  function renderSuggestions(suggestions) {
+    var box = document.getElementById('reviewSuggestions');
+    if (!suggestions.length) {
+      box.innerHTML = '';
+      return;
+    }
+    box.innerHTML = suggestions.map(function (s) {
+      return '<div class="ui-message ui-message-warning" role="status"><strong>Consider excluding ' + esc(s.com_name) + '</strong>' +
+        '<span>You rejected ' + s.rejected_pct + '% of its reviewed detections (' + s.rejected + ' of ' + (s.confirmed + s.rejected) + '). ' +
+        'Adding it to the <a href="?view=Excluded">excluded species list</a> stops these detections at the source.</span></div>';
+    }).join('');
   }
 
   function setActive(i) {

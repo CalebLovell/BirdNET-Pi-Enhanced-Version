@@ -715,6 +715,7 @@ if (preg_match('#^/api/v1/system/health$#', $requestUri)) {
     $latest['clip_path'] = detection_clip_relative_path($latest['date'], $latest['species'], $latest['best_file']);
     // Server-computed so browser clock or timezone differences can't skew it
     $latest['seconds_ago'] = max(0, time() - strtotime($latest['date'] . ' ' . $latest['last_time']));
+    $latest['region_rare'] = is_region_rare($latest['sci_name'], $latest['date']);
   }
 
   $new_today = [];
@@ -950,9 +951,33 @@ if (preg_match('#^/api/v1/system/health$#', $requestUri)) {
   $review_map = get_review_map($db, $all_files);
 
   $first_seen_map = [];
-  $fs_res = db_query_safe($db, 'SELECT Sci_Name, MIN(Date) AS first_seen FROM detections GROUP BY Sci_Name', 'queue first seen');
+  $lifetime_map = [];
+  $fs_res = db_query_safe($db, 'SELECT Sci_Name, MIN(Date) AS first_seen, COUNT(*) AS lifetime FROM detections GROUP BY Sci_Name', 'queue first seen');
   while ($row = db_fetch_assoc_safe($fs_res)) {
     $first_seen_map[$row['Sci_Name']] = $row['first_seen'];
+    $lifetime_map[$row['Sci_Name']] = (int)$row['lifetime'];
+  }
+
+  // Per-species precision from review history: the station learns which IDs
+  // it can trust. n >= 10 decisions required before precision means anything.
+  $precision_map = [];
+  $review_stats = [];
+  if (spine_table_exists($db, 'detection_reviews')) {
+    $pr_res = db_query_safe($db, "SELECT sci_name, com_name,
+        SUM(CASE WHEN status = 'confirmed' THEN 1 ELSE 0 END) AS confirmed,
+        SUM(CASE WHEN status = 'false_positive' THEN 1 ELSE 0 END) AS rejected
+      FROM detection_reviews GROUP BY sci_name", 'queue precision');
+    while ($row = db_fetch_assoc_safe($pr_res)) {
+      $n = (int)$row['confirmed'] + (int)$row['rejected'];
+      $review_stats[$row['sci_name']] = [
+        'com_name' => $row['com_name'],
+        'confirmed' => (int)$row['confirmed'],
+        'rejected' => (int)$row['rejected']
+      ];
+      if ($n >= 10) {
+        $precision_map[$row['sci_name']] = (int)$row['confirmed'] / $n;
+      }
+    }
   }
 
   $queue = [];
@@ -966,14 +991,31 @@ if (preg_match('#^/api/v1/system/health$#', $requestUri)) {
     if ($unreviewed === 0) {
       continue;
     }
+    $precision = isset($precision_map[$v['sci_name']]) ? $precision_map[$v['sci_name']] : null;
     $reasons = [];
     // Uncertainty is judged at the visit level: a visit whose BEST detection
     // is confident is not uncertain, even if weaker member detections exist.
+    // Auto-trust: species this station has consistently confirmed (>= 95%
+    // precision) skip the uncertainty routing - their track record speaks.
     if ($v['best_confidence'] >= $band_min && $v['best_confidence'] < $band_max && !isset($review_map[$v['best_file']])) {
-      $reasons[] = 'uncertain';
+      if ($precision === null || $precision < 0.95) {
+        $reasons[] = 'uncertain';
+      }
     }
     if (isset($first_seen_map[$v['sci_name']]) && $first_seen_map[$v['sci_name']] === $v['date']) {
       $reasons[] = 'first_lifetime';
+    }
+    if (is_region_rare($v['sci_name'], $v['date'])) {
+      $reasons[] = 'region_rare';
+    }
+    if (!in_array('first_lifetime', $reasons, true)
+        && isset($lifetime_map[$v['sci_name']]) && $lifetime_map[$v['sci_name']] <= YARD_RARE_LIFETIME_MAX) {
+      $reasons[] = 'yard_rare';
+    }
+    // Auto-route: species this station usually rejects get reviewed even at
+    // high confidence.
+    if ($precision !== null && $precision <= 0.5) {
+      $reasons[] = 'low_precision';
     }
     if (empty($reasons)) {
       continue;
@@ -1002,6 +1044,22 @@ if (preg_match('#^/api/v1/system/health$#', $requestUri)) {
   $total = count($queue);
   $queue = array_slice($queue, $offset, $limit);
 
+  // Exclude-list suggestions: species the reviewer rejects 80%+ of the time
+  // (with enough decisions to mean it) probably should not be detected here.
+  $suggestions = [];
+  foreach ($review_stats as $sci => $stats) {
+    $n = $stats['confirmed'] + $stats['rejected'];
+    if ($n >= 10 && ($stats['rejected'] / $n) >= 0.8) {
+      $suggestions[] = [
+        'sci_name' => $sci,
+        'com_name' => $stats['com_name'],
+        'confirmed' => $stats['confirmed'],
+        'rejected' => $stats['rejected'],
+        'rejected_pct' => round(($stats['rejected'] / $n) * 100)
+      ];
+    }
+  }
+
   api_json([
     'queue' => $queue,
     'count' => count($queue),
@@ -1009,6 +1067,7 @@ if (preg_match('#^/api/v1/system/health$#', $requestUri)) {
     'offset' => $offset,
     'band' => ['min' => $band_min, 'max' => $band_max],
     'days' => $days,
+    'suggestions' => $suggestions,
     'generated_at' => date('c')
   ]);
 

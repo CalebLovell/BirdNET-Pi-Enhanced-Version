@@ -64,6 +64,12 @@ check_contains "calendar key present" '"calendar"'
 check "queue has member clips" 200 "/api/v1/reviews/queue?days=7&limit=2"
 check_contains "member_clips present" '"member_clips"'
 check "labels endpoint" 200 "/play.php?getlabels=true"
+check "queue has suggestions key" 200 "/api/v1/reviews/queue?days=7&limit=1"
+check_contains "suggestions key present" '"suggestions"'
+check "queue flags region-rare arrival" 200 "/api/v1/reviews/queue?days=3&limit=50"
+check_contains "region_rare reason present" '"region_rare"'
+check "now has region_rare flag" 200 "/api/v1/dashboard/now"
+check_contains "region_rare key in now" '"region_rare"'
 for sv in dashboard behavior migration environmental health forecasting report; do
   check "insights $sv" 200 "/?view=Insights&subview=$sv"
 done
