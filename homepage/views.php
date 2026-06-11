@@ -573,6 +573,7 @@ if(isset($_GET['view'])){
   ensure_authenticated();
   $allowedCommands = array('sudo systemctl stop livestream.service && sudo systemctl stop icecast2.service',
                      'sudo systemctl restart livestream.service && sudo systemctl restart icecast2.service',
+                     'sudo systemctl restart icecast2.service && sudo systemctl restart livestream.service',
                      'sudo systemctl disable --now livestream.service && sudo systemctl disable icecast2 && sudo systemctl stop icecast2.service',
                      'sudo systemctl enable icecast2 && sudo systemctl start icecast2.service && sudo systemctl enable --now livestream.service',
                      'sudo systemctl stop web_terminal.service',
