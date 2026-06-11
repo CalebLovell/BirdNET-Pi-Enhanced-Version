@@ -102,6 +102,25 @@ if(isset($_GET["latitude"])){
   } else {
     $apprise_weekly_report = 0;
   }
+  if(isset($_GET['apprise_notify_rare'])) {
+    $apprise_notify_rare = 1;
+  } else {
+    $apprise_notify_rare = 0;
+  }
+  if(isset($_GET['apprise_visit_grouping'])) {
+    $apprise_visit_grouping = 1;
+  } else {
+    $apprise_visit_grouping = 0;
+  }
+  $apprise_quiet_start = (isset($_GET['apprise_quiet_start']) && is_numeric($_GET['apprise_quiet_start']))
+    ? max(0, min(23, (int)$_GET['apprise_quiet_start'])) : "";
+  $apprise_quiet_end = (isset($_GET['apprise_quiet_end']) && is_numeric($_GET['apprise_quiet_end']))
+    ? max(0, min(23, (int)$_GET['apprise_quiet_end'])) : "";
+  // Quiet hours only make sense as a pair
+  if ($apprise_quiet_start === "" || $apprise_quiet_end === "") {
+    $apprise_quiet_start = "";
+    $apprise_quiet_end = "";
+  }
 
   if(isset($timezone) && in_array($timezone, DateTimeZone::listIdentifiers())) {
     # dpkg-reconfigure tzdata is a pain to run non-interactively, so we do it in two steps instead
@@ -148,6 +167,10 @@ if(isset($_GET["latitude"])){
   $contents = preg_replace("/APPRISE_NOTIFY_NEW_SPECIES=.*/", "APPRISE_NOTIFY_NEW_SPECIES=$apprise_notify_new_species", $contents);
   $contents = preg_replace("/APPRISE_NOTIFY_NEW_SPECIES_EACH_DAY=.*/", "APPRISE_NOTIFY_NEW_SPECIES_EACH_DAY=$apprise_notify_new_species_each_day", $contents);
   $contents = preg_replace("/APPRISE_WEEKLY_REPORT=.*/", "APPRISE_WEEKLY_REPORT=$apprise_weekly_report", $contents);
+  $contents = preg_replace("/APPRISE_NOTIFY_RARE=.*/", "APPRISE_NOTIFY_RARE=$apprise_notify_rare", $contents);
+  $contents = preg_replace("/APPRISE_VISIT_GROUPING=.*/", "APPRISE_VISIT_GROUPING=$apprise_visit_grouping", $contents);
+  $contents = preg_replace("/APPRISE_QUIET_HOURS_START=.*/", "APPRISE_QUIET_HOURS_START=\"$apprise_quiet_start\"", $contents);
+  $contents = preg_replace("/APPRISE_QUIET_HOURS_END=.*/", "APPRISE_QUIET_HOURS_END=\"$apprise_quiet_end\"", $contents);
   $contents = preg_replace("/IMAGE_PROVIDER=.*/", "IMAGE_PROVIDER=$image_provider", $contents);
   $contents = preg_replace("/FLICKR_API_KEY=.*/", "FLICKR_API_KEY=$flickr_api_key", $contents);
   if(strlen($language) == 2 || strlen($language) == 5){
@@ -498,6 +521,16 @@ https://discordapp.com/api/webhooks/{WebhookID}/{WebhookToken}
       <label for="apprise_weekly_report">Notify each new detection</label><br>
       <input type="checkbox" name="apprise_weekly_report" <?php if($config['APPRISE_WEEKLY_REPORT'] == 1 && filesize($home."/BirdNET-Pi/apprise.txt") != 0) { echo "checked"; };?> >
       <label for="apprise_weekly_report">Send <a href="views.php?view=Weekly%20Report"> weekly report</a></label><br>
+      <input type="checkbox" name="apprise_notify_rare" <?php if(isset($config['APPRISE_NOTIFY_RARE']) && $config['APPRISE_NOTIFY_RARE'] == 1 && filesize($home."/BirdNET-Pi/apprise.txt") != 0) { echo "checked"; };?> >
+      <label for="apprise_notify_rare">Notify rare birds (unusual for your region this week, or rarely heard at your station)</label><br>
+      <input type="checkbox" name="apprise_visit_grouping" <?php if(!isset($config['APPRISE_VISIT_GROUPING']) || $config['APPRISE_VISIT_GROUPING'] != '0') { echo "checked"; };?> >
+      <label for="apprise_visit_grouping">Group rapid repeat detections into one notification per visit (recommended)</label><br>
+
+      <hr>
+      <label>Quiet hours &mdash; no notifications between these local hours (leave blank to disable):</label><br>
+      from <input type="number" name="apprise_quiet_start" value="<?php echo isset($config['APPRISE_QUIET_HOURS_START']) ? h($config['APPRISE_QUIET_HOURS_START']) : ''; ?>" style="width:5em;" min="0" max="23" placeholder="22">
+      to <input type="number" name="apprise_quiet_end" value="<?php echo isset($config['APPRISE_QUIET_HOURS_END']) ? h($config['APPRISE_QUIET_HOURS_END']) : ''; ?>" style="width:5em;" min="0" max="23" placeholder="6">
+      <span class="info-badge" title="Hours are 0-23 and the range may wrap past midnight, e.g. from 22 to 6.">i</span><br>
 
       <hr>
       <label for="minimum_time_limit">Minimum time between notifications of the same species (sec):</label>

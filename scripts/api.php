@@ -158,6 +158,11 @@ function api_weather_label($code) {
 }
 
 function api_ebird_export_count($db, $date, $min_confidence = 0.75) {
+  // Must mirror get_ebird_export_rows() in history.php: reviewed false
+  // positives and hidden detections are excluded from eBird exports.
+  $review_exclusion = spine_table_exists($db, 'detection_reviews')
+    ? "AND File_Name NOT IN (SELECT file_name FROM detection_reviews WHERE status IN ('false_positive', 'hidden'))"
+    : "";
   $stmt = $db->prepare("
     SELECT COUNT(*) AS row_count, COALESCE(SUM(DetectionCount), 0) AS detection_count
     FROM (
@@ -167,6 +172,7 @@ function api_ebird_export_count($db, $date, $min_confidence = 0.75) {
         AND Confidence > :min_confidence
         AND Time IS NOT NULL
         AND length(Time) >= 2
+        $review_exclusion
       GROUP BY Com_Name, CAST(substr(Time, 1, 2) AS INTEGER)
     )
   ");

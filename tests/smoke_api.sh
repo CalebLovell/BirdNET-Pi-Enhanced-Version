@@ -70,6 +70,14 @@ check "queue flags region-rare arrival" 200 "/api/v1/reviews/queue?days=3&limit=
 check_contains "region_rare reason present" '"region_rare"'
 check "now has region_rare flag" 200 "/api/v1/dashboard/now"
 check_contains "region_rare key in now" '"region_rare"'
+check "insights dashboard takeaways" 200 "/?view=Insights&subview=dashboard"
+check_contains "plain english card" "In plain English"
+check "insights behavior takeaways" 200 "/?view=Insights&subview=behavior"
+check_contains "behavior takeaway present" "dawn chorus"
+check "ebird preview" 200 "/api/v1/exports/ebird/preview"
+check_contains "preview has row_count" '"row_count"'
+check "settings page has quiet hours" 200 "/?view=Settings" -u "$AUTH"
+check_contains "quiet hours fields" "apprise_quiet_start"
 for sv in dashboard behavior migration environmental health forecasting report; do
   check "insights $sv" 200 "/?view=Insights&subview=$sv"
 done

@@ -555,6 +555,114 @@ if ($subview == 'forecasting') {
     foreach($top_5_rows as $row) { $pw = db_query_one_safe($db, "SELECT strftime('%W', Date) as week, COUNT(*) as cnt FROM detections WHERE Sci_Name = '" . $db->escapeString($row['Sci_Name']) . "' GROUP BY week ORDER BY cnt DESC LIMIT 1", 'insights forecasting peak week'); $row['peak_week'] = $pw ? $pw['week'] : '??'; $row['peak_count'] = $pw ? $pw['cnt'] : 0; $peak_species[] = $row; }
 }
 
+/* ===== Plain-English takeaways (Phase 4b) =====
+   Each subview opens with a few sentences answering "so what does this
+   mean?", computed from the data gathered above. Notability-gated: a line
+   only appears when there is something worth saying. */
+function render_takeaways($takeaways) {
+    if (empty($takeaways)) {
+        return;
+    }
+    echo '<div class="takeaways-card"><div class="takeaways-title">' . nav_icon('zap') . ' In plain English</div><ul class="takeaways-list">';
+    foreach ($takeaways as $t) {
+        echo '<li>' . $t . '</li>';
+    }
+    echo '</ul></div>';
+}
+
+$takeaways = [];
+if ($subview == 'dashboard') {
+    if ($yard_health_score >= 75) {
+        $takeaways[] = 'Your yard is thriving: a health score of <strong>' . (int)$yard_health_score . '/100</strong>, built from diversity, steady daily activity, rarity, and station stability.';
+    } elseif ($yard_health_score >= 50) {
+        $takeaways[] = 'Your yard is doing fine — health score <strong>' . (int)$yard_health_score . '/100</strong> — with room to grow; the recommendations below show where.';
+    } else {
+        $takeaways[] = 'The health score is low right now (<strong>' . (int)$yard_health_score . '/100</strong>). Quiet days or low diversity usually explain it — see the recommendations below.';
+    }
+    if ((int)$best_day_count > 0) {
+        $takeaways[] = 'Busiest day ever: <strong>' . number_format((int)$best_day_count) . ' detections</strong> on ' . h($best_day_date) . '.';
+    }
+    if ((int)$max_streak >= 7) {
+        $takeaways[] = 'Longest unbroken run of daily detections: <strong>' . (int)$max_streak . ' days</strong>.';
+    }
+    if ((int)$rare_total > 0) {
+        $takeaways[] = (int)$rare_total . ' species have fewer than 5 lifetime detections — the rare-visitor list below is where new yard birds first show up.';
+    }
+} elseif ($subview == 'behavior') {
+    if (!empty($dawn_chorus)) {
+        $takeaways[] = '<strong>' . h($dawn_chorus[0]['Com_Name']) . '</strong> opens your dawn chorus, first heard around ' . h($dawn_chorus[0]['avg_time']) . ' on a typical morning.';
+    }
+    if ($peak_hour_count > 0) {
+        $takeaways[] = 'Your yard is loudest around <strong>' . h($peak_hour_label) . '</strong>.';
+    }
+    if (!empty($nocturnal)) {
+        $takeaways[] = 'Night shift: <strong>' . count($nocturnal) . ' species</strong> active between 10 PM and 4 AM, led by ' . h($nocturnal[0]['Com_Name']) . '.';
+    } else {
+        $takeaways[] = 'No regular night-time activity on record — normal unless owls or nightjars live nearby.';
+    }
+} elseif ($subview == 'migration') {
+    if (!empty($new_arrivals)) {
+        $takeaways[] = '<strong>' . count($new_arrivals) . ' species arrived</strong> in the last two weeks after being absent — most recently ' . h($new_arrivals[0]['Com_Name']) . '.';
+    }
+    if (!empty($gone_quiet)) {
+        $takeaways[] = '<strong>' . h($gone_quiet[0]['Com_Name']) . '</strong> has gone quiet: last heard ' . (int)$gone_quiet[0]['days_ago'] . ' days ago after ' . number_format((int)$gone_quiet[0]['total_cnt']) . ' detections'
+            . (count($gone_quiet) > 1 ? ' — ' . count($gone_quiet) . ' regulars are on this list' : '') . '.';
+    }
+    if (!empty($yoy_comparison)) {
+        $yoy_first = $yoy_comparison[0];
+        $takeaways[] = 'Biggest schedule change vs last year: <strong>' . h($yoy_first['Com_Name']) . '</strong> first appeared ' . abs((int)$yoy_first['day_diff']) . ' days ' . ((int)$yoy_first['day_diff'] < 0 ? 'earlier' : 'later') . ' this year.';
+    }
+    if ($shannon_index > 0) {
+        $div_trend = $yoy_diversity_diff > 0 ? 'up ' . (int)$yoy_diversity_diff . ' species' : ($yoy_diversity_diff < 0 ? 'down ' . abs((int)$yoy_diversity_diff) . ' species' : 'level');
+        $takeaways[] = '30-day diversity is <strong>' . h($diversity_score_text) . '</strong> (Shannon index ' . h($shannon_index) . '), ' . $div_trend . ' compared with this month last year.';
+    }
+} elseif ($subview == 'environmental') {
+    if (!$has_weather) {
+        $takeaways[] = 'No weather data yet — the station syncs hourly from Open-Meteo once it has internet access.';
+    } else {
+        $best_bracket = null;
+        foreach ((array)$temp_brackets as $tb) {
+            if ((int)($tb['det_count'] ?? 0) > 0 && ($best_bracket === null || $tb['det_count'] > $best_bracket['det_count'])) {
+                $best_bracket = $tb;
+            }
+        }
+        if ($best_bracket) {
+            $takeaways[] = 'Your birds are most vocal in the <strong>' . h($best_bracket['bracket']) . '</strong> range (' . number_format((int)$best_bracket['det_count']) . ' detections recorded there).';
+        }
+        $best_cond_name = '';
+        $best_cond_count = 0;
+        foreach ((array)$condition_impact as $cond_name => $cond) {
+            if (is_array($cond) && (int)($cond['det_count'] ?? 0) > $best_cond_count) {
+                $best_cond_count = (int)$cond['det_count'];
+                $best_cond_name = (string)$cond_name;
+            }
+        }
+        if ($best_cond_name !== '') {
+            $takeaways[] = 'Most singing happens in <strong>' . h($best_cond_name) . '</strong> conditions.';
+        }
+    }
+} elseif ($subview == 'health') {
+    if ($overall_avg_conf > 0) {
+        $conf_pct = round($overall_avg_conf * 100);
+        $conf_quality = $conf_pct >= 75 ? 'strong' : ($conf_pct >= 60 ? 'reasonable' : 'weak');
+        $takeaways[] = 'Average ID confidence across every detection is <strong>' . $conf_pct . '%</strong> — ' . $conf_quality . ' for a backyard station.';
+    }
+    if (!empty($phantom_species)) {
+        $takeaways[] = '<strong>' . count($phantom_species) . ' species</strong> show consistently low confidence this month — usually distant birds or misidentifications; repeat offenders are routed to Review automatically.';
+    }
+    if (!empty($silent_days)) {
+        $takeaways[] = count($silent_days) . ' near-silent day' . (count($silent_days) === 1 ? '' : 's') . ' on record (3 or fewer detections) — typically storms or station downtime.';
+    }
+} elseif ($subview == 'forecasting') {
+    if (!empty($expected_today)) {
+        $expected_names = array_slice(array_map(function ($r) { return $r['Com_Name']; }, $expected_today), 0, 3);
+        $takeaways[] = 'Based on previous years, expect <strong>' . h(implode(', ', $expected_names)) . '</strong> around this date.';
+    }
+    if (isset($current_month_name) && $last_year_diversity > 0 && $yoy_diversity_diff != 0) {
+        $takeaways[] = h($current_month_name) . ' is running <strong>' . abs((int)$yoy_diversity_diff) . ' species ' . ($yoy_diversity_diff >= 0 ? 'ahead of' : 'behind') . '</strong> the same month last year.';
+    }
+}
+
 $db->close();
 ?>
 
@@ -873,6 +981,7 @@ $db->close();
     </header>
 
     <?php if ($subview == 'dashboard'): ?>
+    <?php render_takeaways($takeaways); ?>
     <!-- ====== PHASE 9: Yard Health Score Hero ====== -->
     <section class="insights-section" style="margin-bottom: 30px; border: none; background: linear-gradient(135deg, rgba(99, 102, 241, 0.08) 0%, rgba(16, 185, 129, 0.08) 100%); border: 1px solid var(--border-light);">
         <div style="display: flex; flex-wrap: wrap; align-items: center; padding: 30px; gap: 40px;">
@@ -969,6 +1078,7 @@ $db->close();
     <?php endif; ?>
 
     <?php if ($subview == 'behavior'): ?>
+    <?php render_takeaways($takeaways); ?>
     <!-- ====== PHASE 2: Daily Behavior Patterns ====== -->
     <h2 style="margin: 40px 0 20px; font-size: 1.5em; color: var(--text-heading);">🕐 Daily Behavior Patterns</h2>
 
@@ -1083,6 +1193,7 @@ $db->close();
     <?php endif; ?>
 
     <?php if ($subview == 'migration'): ?>
+    <?php render_takeaways($takeaways); ?>
     <!-- ====== PHASE 3: Migration & Seasonal Patterns ====== -->
     <h2 style="margin: 40px 0 20px; font-size: 1.5em; color: var(--text-heading);">🦅 Migration & Seasonal Patterns</h2>
 
@@ -1225,6 +1336,7 @@ $db->close();
     <?php endif; ?>
 
     <?php if ($subview == 'environmental'): ?>
+    <?php render_takeaways($takeaways); ?>
     <?php if (!$has_weather): ?>
         <div style="text-align: center; padding: 100px 20px; color: var(--text-muted);">
             <div style="font-size: 4em; margin-bottom: 20px;">🌤️</div>
@@ -1376,6 +1488,7 @@ $db->close();
     <?php endif; ?>
 
     <?php if ($subview == 'health'): ?>
+    <?php render_takeaways($takeaways); ?>
     <!-- ====== PHASE 6: Confidence, Quality & Silence Anomalies ====== -->
     <h2 style="margin: 40px 0 20px; font-size: 1.5em; color: var(--text-heading);">🔍 Confidence & System Health</h2>
 
@@ -1487,6 +1600,7 @@ $db->close();
     <?php endif; ?>
 
     <?php if ($subview == 'forecasting'): ?>
+    <?php render_takeaways($takeaways); ?>
     <!-- ====== PHASE 7: Long-term Trends & Diversity ====== -->
     <h2 style="margin: 50px 0 20px; font-size: 1.5em; color: var(--text-heading);">📈 Long-term Trends & Diversity</h2>
 

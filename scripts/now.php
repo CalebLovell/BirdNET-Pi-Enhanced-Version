@@ -71,6 +71,25 @@ function build_todays_story($db) {
     }
   }
 
+  // Cadence breaks: regulars (heard on 10+ of the last 14 days) that have
+  // suddenly fallen silent for 2+ days and are still absent today.
+  $cadence = [];
+  $res = db_query_safe($db, "SELECT Com_Name,
+      COUNT(DISTINCT Date) AS days_present,
+      CAST(JULIANDAY(DATE('now','localtime')) - JULIANDAY(MAX(Date)) AS INTEGER) AS gap
+    FROM detections
+    WHERE Date >= DATE('now','localtime','-14 days') AND Date < DATE('now','localtime')
+      AND Sci_Name NOT IN (SELECT DISTINCT Sci_Name FROM detections WHERE Date = DATE('now','localtime'))
+    GROUP BY Sci_Name
+    HAVING days_present >= 10 AND gap >= 2
+    ORDER BY days_present DESC LIMIT 3", 'story cadence');
+  while ($row = db_fetch_assoc_safe($res)) {
+    $cadence[] = $row['Com_Name'] . ' (usually daily, silent for ' . $row['gap'] . ' days)';
+  }
+  if (!empty($cadence)) {
+    $lines[] = ['icon' => 'clock', 'text' => 'Breaking routine: ' . implode('; ', $cadence) . '.'];
+  }
+
   // Volume: only speak when the baseline is meaningful AND deviation is large
   if ($baseline >= 20) {
     $ratio = $today_count / max(1, $baseline);

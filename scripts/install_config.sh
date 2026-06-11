@@ -107,6 +107,15 @@ APPRISE_NOTIFY_NEW_SPECIES_EACH_DAY=0
 APPRISE_MINIMUM_SECONDS_BETWEEN_NOTIFICATIONS_PER_SPECIES=0
 APPRISE_ONLY_NOTIFY_SPECIES_NAMES=""
 APPRISE_ONLY_NOTIFY_SPECIES_NAMES_2=""
+## Rare-bird alerts: region-rare (location model) or yard-rare (few lifetime detections)
+APPRISE_NOTIFY_RARE=0
+## One notification per visit instead of one per detection (0 restores per-chirp)
+APPRISE_VISIT_GROUPING=1
+## No notifications between these local hours (0-23, may wrap midnight; blank disables)
+APPRISE_QUIET_HOURS_START=""
+APPRISE_QUIET_HOURS_END=""
+## Detections of a species within this many quiet minutes belong to one visit
+VISIT_GAP_MINUTES=5
 
 #----------------------  Image Provider Configuration ------------------------#
 ## WIKIPEDIA or FLICKR (Flickr requires API key)

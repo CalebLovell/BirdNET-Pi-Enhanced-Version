@@ -29,6 +29,10 @@ $totalcount = db_fetch_assoc_safe($result1) ?: ['COUNT(*)' => 0];
 
 function get_ebird_export_rows($db, $date, $min_confidence = 0.75) {
 	$rows = [];
+	// Detections you reviewed as false positives (or hid) never reach eBird
+	$review_exclusion = spine_table_exists($db, 'detection_reviews')
+		? "AND File_Name NOT IN (SELECT file_name FROM detection_reviews WHERE status IN ('false_positive', 'hidden'))"
+		: "";
 	$statement = $db->prepare("
 		SELECT Com_Name,
 			   CAST(substr(Time, 1, 2) AS INTEGER) AS Hour,
@@ -38,6 +42,7 @@ function get_ebird_export_rows($db, $date, $min_confidence = 0.75) {
 		  AND Confidence > :min_confidence
 		  AND Time IS NOT NULL
 		  AND length(Time) >= 2
+		  $review_exclusion
 		GROUP BY Com_Name, CAST(substr(Time, 1, 2) AS INTEGER)
 		ORDER BY Hour ASC, DetectionCount DESC, Com_Name ASC
 	");
@@ -523,7 +528,10 @@ async function submitID() {
 <div style="text-align: center; margin: 20px auto; max-width: 650px;">
     <div class="ebird-info-box" style="background: var(--bg-secondary, #f1f5f9); padding: 20px; border-radius: 12px; font-size: 0.9em; color: var(--text-secondary); margin-bottom: 24px; line-height: 1.5; text-align: left; box-shadow: var(--shadow-sm); border: 1px solid var(--border);">
       <strong style="color: var(--text-heading); font-size: 1.15em; border-bottom: 2px solid var(--accent); padding-bottom: 4px; display: inline-block; margin-bottom: 12px;">What gets exported?</strong><br>
-      A properly formatted <strong>Comma Separated Values (.csv)</strong> file using the <em>eBird Record Format</em>.<br>
+      A properly formatted <strong>Comma Separated Values (.csv)</strong> file using the <em>eBird Record Format</em>.
+      Only detections above 75% confidence are included, and anything you marked
+      <em>Not this bird</em> or hid in the Review queue is excluded automatically &mdash;
+      reviewing before exporting keeps your eBird checklists clean.<br>
       This file contains all detections for your selected date with <strong>&gt;75% confidence</strong>. To comply with eBird guidelines for automated recorders, data is automatically aggregated to a maximum of <strong>1 entry per species per hour</strong>.<br><br>
       
       <strong style="color: var(--text-heading); font-size: 1.15em; border-bottom: 2px solid var(--accent); padding-bottom: 4px; display: inline-block; margin-bottom: 12px; margin-top: 8px;">How to upload your data:</strong>

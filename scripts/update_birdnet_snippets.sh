@@ -314,6 +314,24 @@ EOF
   chown $USER:$USER $HOME/BirdNET-Pi/templates/livestream.service
 fi
 
+# Notification v2 config keys (Phase 4): seeded so the Settings UI's
+# preg_replace-based writer can update them.
+if ! grep -E '^APPRISE_NOTIFY_RARE=' /etc/birdnet/birdnet.conf &>/dev/null;then
+  echo "APPRISE_NOTIFY_RARE=0" >> /etc/birdnet/birdnet.conf
+fi
+if ! grep -E '^APPRISE_VISIT_GROUPING=' /etc/birdnet/birdnet.conf &>/dev/null;then
+  echo "APPRISE_VISIT_GROUPING=1" >> /etc/birdnet/birdnet.conf
+fi
+if ! grep -E '^APPRISE_QUIET_HOURS_START=' /etc/birdnet/birdnet.conf &>/dev/null;then
+  echo 'APPRISE_QUIET_HOURS_START=""' >> /etc/birdnet/birdnet.conf
+fi
+if ! grep -E '^APPRISE_QUIET_HOURS_END=' /etc/birdnet/birdnet.conf &>/dev/null;then
+  echo 'APPRISE_QUIET_HOURS_END=""' >> /etc/birdnet/birdnet.conf
+fi
+if ! grep -E '^VISIT_GAP_MINUTES=' /etc/birdnet/birdnet.conf &>/dev/null;then
+  echo "VISIT_GAP_MINUTES=5" >> /etc/birdnet/birdnet.conf
+fi
+
 # Data spine tables (Phase 1): reviews, species prefs, notes. Additive only -
 # the detections table is never altered. Keep in sync with createdb.sh and
 # spine_schema_statements() in scripts/common.php.
