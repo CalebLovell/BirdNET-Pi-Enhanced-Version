@@ -191,6 +191,9 @@ $visit_explainer = 'A visit groups repeated detections of the same bird. After '
     }
     document.getElementById('heroSpecies').textContent = v.species;
     document.getElementById('heroSci').textContent = v.sci_name;
+    var detailLink = document.getElementById('heroDetailLink');
+    detailLink.href = '?view=Bird&sci_name=' + encodeURIComponent(v.sci_name);
+    detailLink.innerHTML = 'About ' + esc(v.species) + ' &rarr;';
 
     var pct = Math.round(v.best_confidence * 100);
     var isActive = typeof v.seconds_ago === 'number' && v.seconds_ago <= (data.gap_seconds || 300);

@@ -146,11 +146,11 @@ function render_species_cards($species_list, $image_provider, $fallback_provider
         $wiki_url = 'https://wikipedia.org/wiki/' . str_replace('%20', '_', rawurlencode($sci_name));
 ?>
             <div class="bird-card">
-                <div class="bird-image-container">
+                <a class="bird-image-container" href="?view=Bird&amp;sci_name=<?php echo rawurlencode($sci_name); ?>">
                     <img src="<?php echo h($image_url); ?>" alt="<?php echo h($com_name); ?>" class="bird-image" loading="lazy" onerror="this.onerror=null; this.src='images/bird.png'">
-                </div>
+                </a>
                 <div class="card-content">
-                    <span class="bird-name"><?php echo h($com_name); ?></span>
+                    <a class="bird-name" href="?view=Bird&amp;sci_name=<?php echo rawurlencode($sci_name); ?>"><?php echo h($com_name); ?></a>
                     <span class="bird-sci"><?php echo h($sci_name); ?></span>
                     <table class="stats-table">
                         <tr><td>Detections:</td><td><?php echo number_format($bird['Count']); ?></td></tr>
@@ -158,6 +158,9 @@ function render_species_cards($species_list, $image_provider, $fallback_provider
                         <tr><td>First:</td><td><?php echo date('n/j/Y', strtotime($bird['FirstDate'])); ?></td></tr>
                     </table>
                     <div class="species-card-links">
+                        <a href="?view=Bird&amp;sci_name=<?php echo rawurlencode($sci_name); ?>" class="mrd-link-pill bird-detail-pill">
+                            Details &amp; history
+                        </a>
                         <a href="<?php echo h($info['URL']); ?>" target="_blank" rel="noopener noreferrer" class="mrd-link-pill">
                             <img src="images/info.png" alt=""> <?php echo h($info['TITLE']); ?>
                         </a>

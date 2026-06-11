@@ -602,6 +602,24 @@ if (preg_match('#^/api/v1/system/health$#', $requestUri)) {
     ];
   }
 
+  // Hourly weather for the requested date (drawn as the Timeline weather strip)
+  $weather_map = [];
+  $has_weather_tbl = db_query_single_safe($db, "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='weather'", 0, 'timeline weather table') > 0;
+  if ($has_weather_tbl) {
+    $w_stmt = $db->prepare('SELECT * FROM weather WHERE Date = :date AND Temp IS NOT NULL ORDER BY Hour ASC');
+    if ($w_stmt) {
+      $w_stmt->bindValue(':date', $date, SQLITE3_TEXT);
+      $w_res = db_execute_safe($db, $w_stmt, 'timeline weather rows');
+      while ($w_row = db_fetch_assoc_safe($w_res)) {
+        $weather_map[(int)$w_row['Hour']] = [
+          'temp' => round((float)$w_row['Temp']),
+          'code' => (int)$w_row['ConditionCode'],
+          'is_day' => isset($w_row['IsDay']) ? (int)$w_row['IsDay'] : 1
+        ];
+      }
+    }
+  }
+
   http_response_code(200);
   header('Content-Type: application/json');
   echo json_encode([
@@ -609,7 +627,8 @@ if (preg_match('#^/api/v1/system/health$#', $requestUri)) {
     'total_detections' => $total_detections,
     'total_species' => count($species_set),
     'peak_hour' => $peak_hour,
-    'hours' => $hours_result
+    'hours' => $hours_result,
+    'weather' => $weather_map
   ]);
 
 } elseif (preg_match('#^/api/v1/species/search$#', $requestUri)) {
@@ -781,6 +800,15 @@ if (preg_match('#^/api/v1/system/health$#', $requestUri)) {
     $hourly[(int)$row['hour']] = (int)$row['count'];
   }
 
+  // Daily counts for the past year (calendar heatmap on the Birds detail page)
+  $calendar = [];
+  $cal_stmt = $db->prepare("SELECT Date, COUNT(*) AS count FROM detections WHERE Sci_Name = :sci AND Date >= DATE('now','localtime','-365 days') GROUP BY Date ORDER BY Date ASC");
+  $cal_stmt->bindValue(':sci', $sci, SQLITE3_TEXT);
+  $cal_res = db_execute_safe($db, $cal_stmt, 'species detail calendar');
+  while ($row = db_fetch_assoc_safe($cal_res)) {
+    $calendar[$row['Date']] = (int)$row['count'];
+  }
+
   $prefs = get_species_prefs_row($db, $sci);
 
   $precision = null;
@@ -826,6 +854,7 @@ if (preg_match('#^/api/v1/system/health$#', $requestUri)) {
     ] : null,
     'daily_30d' => $daily,
     'hourly_pattern' => $hourly,
+    'calendar' => $calendar,
     'prefs' => $prefs,
     'review_counts' => $review_counts,
     'precision' => $precision,
@@ -949,7 +978,14 @@ if (preg_match('#^/api/v1/system/health$#', $requestUri)) {
     if (empty($reasons)) {
       continue;
     }
+    // Member clip paths let the Review page reassign the whole visit
+    // (one rename call per file via play.php's change-identification flow).
+    $member_clips = [];
+    foreach ($v['detections'] as $d) {
+      $member_clips[] = detection_clip_relative_path($v['date'], $v['species'], $d['file']);
+    }
     unset($v['detections']);
+    $v['member_clips'] = $member_clips;
     $v['unreviewed_count'] = $unreviewed;
     $v['reasons'] = $reasons;
     $v['clip_path'] = detection_clip_relative_path($v['date'], $v['species'], $v['best_file']);
@@ -975,6 +1011,63 @@ if (preg_match('#^/api/v1/system/health$#', $requestUri)) {
     'days' => $days,
     'generated_at' => date('c')
   ]);
+
+} elseif (preg_match('#^/api/v1/reviews/examples$#', $requestUri)) {
+  // "Verify by comparison": known-good spectrograms of the same species from
+  // this station. Prefers human-confirmed clips; falls back to the station's
+  // highest-confidence detections when nothing is confirmed yet.
+  $sci = isset($_GET['q']) ? trim($_GET['q']) : (isset($_GET['sci_name']) ? trim($_GET['sci_name']) : '');
+  if ($sci === '') {
+    api_error('sci_name is required');
+  }
+  $exclude = isset($_GET['exclude']) ? trim($_GET['exclude']) : '';
+  $examples = [];
+  $seen = [];
+
+  if (spine_table_exists($db, 'detection_reviews')) {
+    $ex_stmt = $db->prepare("SELECT r.file_name, r.date, r.com_name, d.Confidence
+      FROM detection_reviews r JOIN detections d ON d.File_Name = r.file_name
+      WHERE r.sci_name = :sci AND r.status = 'confirmed' AND r.file_name != :exclude
+      ORDER BY d.Confidence DESC LIMIT 3");
+    if ($ex_stmt) {
+      $ex_stmt->bindValue(':sci', $sci, SQLITE3_TEXT);
+      $ex_stmt->bindValue(':exclude', $exclude, SQLITE3_TEXT);
+      $ex_res = db_execute_safe($db, $ex_stmt, 'review examples confirmed');
+      while ($row = db_fetch_assoc_safe($ex_res)) {
+        $seen[$row['file_name']] = true;
+        $examples[] = [
+          'file' => $row['file_name'],
+          'clip_path' => detection_clip_relative_path($row['date'], $row['com_name'], $row['file_name']),
+          'confidence' => round((float)$row['Confidence'], 4),
+          'source' => 'confirmed'
+        ];
+      }
+    }
+  }
+
+  if (count($examples) < 3) {
+    $fb_stmt = $db->prepare('SELECT File_Name, Date, Com_Name, Confidence FROM detections
+      WHERE Sci_Name = :sci AND File_Name != :exclude AND Confidence >= 0.9
+      ORDER BY Confidence DESC LIMIT 6');
+    if ($fb_stmt) {
+      $fb_stmt->bindValue(':sci', $sci, SQLITE3_TEXT);
+      $fb_stmt->bindValue(':exclude', $exclude, SQLITE3_TEXT);
+      $fb_res = db_execute_safe($db, $fb_stmt, 'review examples fallback');
+      while (count($examples) < 3 && ($row = db_fetch_assoc_safe($fb_res))) {
+        if (isset($seen[$row['File_Name']])) {
+          continue;
+        }
+        $examples[] = [
+          'file' => $row['File_Name'],
+          'clip_path' => detection_clip_relative_path($row['Date'], $row['Com_Name'], $row['File_Name']),
+          'confidence' => round((float)$row['Confidence'], 4),
+          'source' => 'high_confidence'
+        ];
+      }
+    }
+  }
+
+  api_json(['examples' => $examples, 'count' => count($examples)]);
 
 } elseif (preg_match('#^/api/v1/station/doctor$#', $requestUri)) {
   $home = get_home();

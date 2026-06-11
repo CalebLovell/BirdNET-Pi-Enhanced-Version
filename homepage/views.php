@@ -161,11 +161,16 @@ $insights_items = [
 $main_nav = [
   ['Now', 'home', 'Now'],
   ['Live', 'activity', 'Live'],
-  ['Recordings', 'music', 'Recordings'],
+  ['Timeline', 'clock', 'Timeline'],
   ['Species', 'bird', 'Birds'],
   'INSIGHTS',
   ['Review', 'search', 'Review'],
   ['Tools', 'sliders', 'Settings'],
+];
+/* Views reached from within a section highlight that section's nav item */
+$nav_aliases = [
+  'Timeline' => ['Recordings'],
+  'Species' => ['Bird', 'Species Stats', 'Todays Detections'],
 ];
 foreach ($main_nav as $nav_item) {
   if ($nav_item === 'INSIGHTS') {
@@ -187,7 +192,8 @@ foreach ($main_nav as $nav_item) {
     echo '</div></div>';
     continue;
   }
-  $is_active = ($current_view === $nav_item[0]);
+  $is_active = ($current_view === $nav_item[0])
+    || (isset($nav_aliases[$nav_item[0]]) && in_array($current_view, $nav_aliases[$nav_item[0]], true));
   $extra = ($nav_item[0] === 'Tools') ? $updatediv : '';
   echo '<a href="?view=' . rawurlencode($nav_item[0]) . '"' . ($is_active ? ' class="active" aria-current="page"' : '') . '>' . nav_icon($nav_item[1]) . ' <span>' . h($nav_item[2]) . '</span>' . $extra . '</a>';
 }
@@ -337,7 +343,7 @@ foreach ($main_nav as $nav_item) {
             ? '<span class="feed-now"><span class="live-dot"></span> now</span>'
             : v.last_time.slice(0, 5);
           return `<li class="feed-item${active ? ' feed-active' : ''}">
-            <span class="feed-species">${v.species}</span>
+            <a class="feed-species" href="?view=Bird&sci_name=${encodeURIComponent(v.sci_name)}">${v.species}</a>
             <span class="feed-count">&times;${v.count}</span>
             <span class="feed-badge ${cls}">${pct}%</span>
             <span class="feed-time">${when}</span>
@@ -465,6 +471,8 @@ if(isset($_GET['view'])){
   if($_GET['view'] == "Live"){include('scripts/live.php');}
   if($_GET['view'] == "Doctor"){include('scripts/doctor.php');}
   if($_GET['view'] == "Review"){include('scripts/review.php');}
+  if($_GET['view'] == "Timeline"){include('scripts/timeline.php');}
+  if($_GET['view'] == "Bird"){include('scripts/bird.php');}
   if($_GET['view'] == "Overview"){include('overview.php');}
   if($_GET['view'] == "Todays Detections"){include('todays_detections.php');}
   if($_GET['view'] == "Kiosk"){$kiosk = true;include('todays_detections.php');}

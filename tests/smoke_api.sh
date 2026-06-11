@@ -46,6 +46,24 @@ check_contains "now has hero" "LAST HEARD"
 check_contains "now has health pill" "health-pill"
 check "doctor weather sync unauthenticated" 401 "/scripts/doctor.php?sync_weather=true"
 check "doctor support bundle unauthenticated" 401 "/scripts/doctor.php?support_bundle=true"
+check "timeline page" 200 "/?view=Timeline"
+check_contains "timeline has day replay" "Day replay"
+check "bird page" 200 "/?view=Bird&sci_name=Cardinalis%20cardinalis"
+check_contains "bird page has calendar" "birdCalendar"
+check "bird page no species" 200 "/?view=Bird"
+check_contains "bird page prompts selection" "No species selected"
+check "review page v2" 200 "/?view=Review"
+check_contains "review has keyboard help" "Reassign"
+check "reviews examples" 200 "/api/v1/reviews/examples?sci_name=Cardinalis%20cardinalis"
+check_contains "examples have source" '"source"'
+check "examples missing param" 400 "/api/v1/reviews/examples"
+check "timeline api has weather" 200 "/api/v1/detections/timeline"
+check_contains "timeline weather key" '"weather"'
+check "species detail has calendar" 200 "/api/v1/species/detail?sci_name=Cardinalis%20cardinalis"
+check_contains "calendar key present" '"calendar"'
+check "queue has member clips" 200 "/api/v1/reviews/queue?days=7&limit=2"
+check_contains "member_clips present" '"member_clips"'
+check "labels endpoint" 200 "/play.php?getlabels=true"
 for sv in dashboard behavior migration environmental health forecasting report; do
   check "insights $sv" 200 "/?view=Insights&subview=$sv"
 done
