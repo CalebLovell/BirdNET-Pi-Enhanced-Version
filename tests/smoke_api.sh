@@ -36,9 +36,16 @@ check_contains() { # check_contains <name> <needle>
 }
 
 echo "== Pages =="
-for v in Overview Analytics Species Recordings Spectrogram Styleguide; do
+for v in Now Live Doctor Review Overview Analytics Species Recordings Spectrogram Styleguide; do
   check "page $v" 200 "/?view=$v"
 done
+check "default route is Now" 200 "/"
+check_contains "default shows Today's Story" "Today's Story"
+check "now page hero" 200 "/?view=Now"
+check_contains "now has hero" "LAST HEARD"
+check_contains "now has health pill" "health-pill"
+check "doctor weather sync unauthenticated" 401 "/scripts/doctor.php?sync_weather=true"
+check "doctor support bundle unauthenticated" 401 "/scripts/doctor.php?support_bundle=true"
 for sv in dashboard behavior migration environmental health forecasting report; do
   check "insights $sv" 200 "/?view=Insights&subview=$sv"
 done

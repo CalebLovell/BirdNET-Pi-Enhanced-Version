@@ -87,6 +87,57 @@
   }
 }
 
+/* ===== Station health pill (links to ?view=Doctor) ===== */
+.health-pill {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 6px 12px;
+  margin: 8px 16px 0;
+  border-radius: 999px;
+  background: var(--bg-secondary, #f1f5f9);
+  font-size: 0.78em;
+  color: var(--text-secondary);
+  text-decoration: none;
+  white-space: nowrap;
+  overflow: hidden;
+}
+
+.health-pill:hover {
+  background: var(--bg-button-hover, #e2e8f0);
+  font-weight: normal;
+  color: var(--text-primary);
+}
+
+.health-pill .health-dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  background: var(--text-muted, #94a3b8);
+}
+
+.health-pill.ok .health-dot { background: var(--success, #10b981); }
+.health-pill.warn .health-dot { background: var(--warning, #f59e0b); }
+.health-pill.error .health-dot {
+  background: var(--danger, #ef4444);
+  animation: pulse-dot 1.2s infinite;
+}
+
+.mobile-header .health-pill {
+  margin: 0;
+}
+
+.sidebar.collapsed .sidebar-health .health-text {
+  display: none;
+}
+
+.sidebar.collapsed .sidebar-health {
+  justify-content: center;
+  margin: 8px 10px 0;
+  padding: 6px 0;
+}
+
 /* ===== Sidebar live activity feed ===== */
 .sidebar-feed {
   flex-grow: 1;

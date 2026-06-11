@@ -50,12 +50,12 @@ elseif ($config["LONGITUDE"] == "0.000") {
 }
 
 $site_name = get_sitename();
-$current_view = isset($_GET['view']) ? $_GET['view'] : 'Overview';
+$current_view = isset($_GET['view']) ? $_GET['view'] : 'Now';
 $current_subview = isset($_GET['subview']) ? $_GET['subview'] : '';
 if (is_protected_view($current_view)) {
   ensure_authenticated();
 }
-$page_title = $current_view === 'Overview' ? $site_name : $current_view . ' · ' . $site_name;
+$page_title = $current_view === 'Now' ? $site_name : $current_view . ' · ' . $site_name;
 
 $updatediv = "";
 if (isset($_SESSION['behind']) && intval($_SESSION['behind']) >= 50 && ($config['SILENCE_UPDATE_INDICATOR'] != 1)) {
@@ -88,6 +88,7 @@ function nav_icon($name) {
   <link rel="stylesheet" href="<?php echo $color_scheme . '?v=' . date('n.d.y', filemtime($color_scheme)); ?>">
   <link rel="stylesheet" href="static/css/tokens.css?v=<?php echo filemtime('static/css/tokens.css'); ?>">
   <link rel="stylesheet" href="static/css/shell.css?v=<?php echo filemtime('static/css/shell.css'); ?>">
+  <link rel="stylesheet" href="static/css/pages.css?v=<?php echo filemtime('static/css/pages.css'); ?>">
   <link rel="stylesheet" type="text/css" href="static/dialog-polyfill.css">
   <script src="static/ui-helpers.js?v=<?php echo date('n.d.y', filemtime('static/ui-helpers.js')); ?>" defer></script>
   <?php if (isset($_SESSION['behind']) && intval($_SESSION['behind']) >= 99) { ?>
@@ -129,6 +130,7 @@ function nav_icon($name) {
   <div class="sidebar-logo">
     <img src="images/bnp.png" alt="BirdNET-Pi logo">
   </div>
+  <a href="?view=Doctor" class="health-pill unknown" aria-label="Station health"><span class="health-dot" aria-hidden="true"></span><span class="health-text">&hellip;</span></a>
   <button type="button" class="icon" onclick="myFunction()" aria-label="Toggle navigation menu"><img src="images/menu.png" alt=""></button>
 </div>
 <div class="sidebar" id="mySidebar">
@@ -138,37 +140,49 @@ function nav_icon($name) {
     </div>
     <button type="button" class="sidebar-toggle" onclick="myFunction()" aria-label="Toggle sidebar">«</button>
   </div>
+  <a href="?view=Doctor" class="health-pill sidebar-health unknown" aria-label="Station health"><span class="health-dot" aria-hidden="true"></span><span class="health-text">Checking station&hellip;</span></a>
   <nav class="sidebar-nav" aria-label="Main navigation">
 <?php
-$insights_subviews = [
-  ['dashboard', 'grid', 'Dashboard'],
-  ['behavior', 'clock', 'Behavior'],
-  ['migration', 'send', 'Migration'],
-  ['environmental', 'cloud', 'Weather'],
-  ['health', 'search', 'Health'],
-  ['forecasting', 'trending-up', 'Trends & Forecasting'],
-  ['report', 'file-text', 'Reports'],
+/* Question-first navigation (Phase 2). Insights groups the analysis pages,
+   including the Chart.js dashboard ("Charts" = the Analytics view). Legacy
+   ?view= values (Overview, Analytics, Spectrogram, ...) all stay routed for
+   bookmarks; they just aren't all listed here. */
+$insights_items = [
+  // [view, subview-or-null, icon, label]
+  ['Analytics', null, 'chart', 'Charts'],
+  ['Insights', 'dashboard', 'grid', 'Dashboard'],
+  ['Insights', 'behavior', 'clock', 'Behavior'],
+  ['Insights', 'migration', 'send', 'Migration'],
+  ['Insights', 'environmental', 'cloud', 'Weather'],
+  ['Insights', 'health', 'search', 'Health'],
+  ['Insights', 'forecasting', 'trending-up', 'Trends & Forecasting'],
+  ['Insights', 'report', 'file-text', 'Reports'],
 ];
 $main_nav = [
-  ['Overview', 'home', 'Overview'],
-  ['Analytics', 'chart', 'Analytics'],
-  ['Species', 'bird', 'Species'],
-  'INSIGHTS',
+  ['Now', 'home', 'Now'],
+  ['Live', 'activity', 'Live'],
   ['Recordings', 'music', 'Recordings'],
-  ['Spectrogram', 'activity', 'Spectrogram'],
-  ['View Log', 'file-text', 'Log'],
-  ['Tools', 'sliders', 'Tools'],
+  ['Species', 'bird', 'Birds'],
+  'INSIGHTS',
+  ['Review', 'search', 'Review'],
+  ['Tools', 'sliders', 'Settings'],
 ];
 foreach ($main_nav as $nav_item) {
   if ($nav_item === 'INSIGHTS') {
-    $insights_open = ($current_view === 'Insights');
+    $insights_open = ($current_view === 'Insights' || $current_view === 'Analytics');
     $effective_subview = $current_subview === '' ? 'dashboard' : $current_subview;
     echo '<div class="sidebar-dropdown' . ($insights_open ? ' open' : '') . '">';
     echo '<button type="button" class="sidebar-dropdown-toggle" aria-expanded="' . ($insights_open ? 'true' : 'false') . '">' . nav_icon('zap') . ' <span>Insights</span> <span class="dropdown-arrow" aria-hidden="true">&#9660;</span></button>';
     echo '<div class="sidebar-dropdown-content">';
-    foreach ($insights_subviews as $sv) {
-      $sv_active = $insights_open && $effective_subview === $sv[0];
-      echo '<a href="?view=Insights&amp;subview=' . $sv[0] . '"' . ($sv_active ? ' class="active" aria-current="page"' : '') . '>' . nav_icon($sv[1]) . ' <span>' . h($sv[2]) . '</span></a>';
+    foreach ($insights_items as $sv) {
+      if ($sv[1] === null) {
+        $sv_active = ($current_view === $sv[0]);
+        $href = '?view=' . rawurlencode($sv[0]);
+      } else {
+        $sv_active = ($current_view === 'Insights' && $effective_subview === $sv[1]);
+        $href = '?view=Insights&amp;subview=' . $sv[1];
+      }
+      echo '<a href="' . $href . '"' . ($sv_active ? ' class="active" aria-current="page"' : '') . '>' . nav_icon($sv[2]) . ' <span>' . h($sv[3]) . '</span></a>';
     }
     echo '</div></div>';
     continue;
@@ -328,11 +342,35 @@ foreach ($main_nav as $nav_item) {
         }
       });
   }
+  function refreshHealthPill() {
+    fetch('api/v1/station/doctor?_=' + Date.now(), { headers: { 'Accept': 'application/json' } })
+      .then(r => {
+        if (!r.ok) throw new Error('doctor request failed');
+        return r.json();
+      })
+      .then(data => {
+        const firstIssue = (data.checks || []).find(c => c.status !== 'ok');
+        document.querySelectorAll('.health-pill').forEach(pill => {
+          pill.classList.remove('ok', 'warn', 'error', 'unknown');
+          pill.classList.add(data.status || 'unknown');
+          const text = pill.querySelector('.health-text');
+          if (text) {
+            text.textContent = data.status === 'ok' ? 'Station healthy' : (firstIssue ? firstIssue.label : 'Check station');
+          }
+          pill.title = firstIssue ? firstIssue.message : 'All systems normal';
+        });
+      })
+      .catch(() => {
+        // Keep the last known state on transient failures.
+      });
+  }
   document.addEventListener("DOMContentLoaded", function() {
     refreshLiveFeed();
     refreshLiveWeather();
+    refreshHealthPill();
     setInterval(refreshLiveFeed, 30000);
     setInterval(refreshLiveWeather, 60000);
+    setInterval(refreshHealthPill, 30000);
   });
   </script>
 
@@ -412,6 +450,10 @@ if(isset($_GET['view'])){
   }
   if($_GET['view'] == "Spectrogram"){include('spectrogram.php');}
   if($_GET['view'] == "View Log"){echo "<body style=\"scroll:no;overflow-x:hidden;\"><iframe style=\"width:calc( 100% + 1em);\" src=\"log\"></iframe></body>";}
+  if($_GET['view'] == "Now"){include('scripts/now.php');}
+  if($_GET['view'] == "Live"){include('scripts/live.php');}
+  if($_GET['view'] == "Doctor"){include('scripts/doctor.php');}
+  if($_GET['view'] == "Review"){include('scripts/review.php');}
   if($_GET['view'] == "Overview"){include('overview.php');}
   if($_GET['view'] == "Todays Detections"){include('todays_detections.php');}
   if($_GET['view'] == "Kiosk"){$kiosk = true;include('todays_detections.php');}
@@ -447,9 +489,11 @@ if(isset($_GET['view'])){
               <div class=\"tools-group\">
                 <h3>⚙️ System & Settings</h3>
                 <button type=\"submit\" name=\"view\" value=\"Settings\" form=\"views\">Settings</button>
+                <button type=\"submit\" name=\"view\" value=\"Doctor\" form=\"views\">Station Doctor</button>
                 <button type=\"submit\" name=\"view\" value=\"System Info\" form=\"views\">System Info</button>
                 <button type=\"submit\" name=\"view\" value=\"System Controls\" form=\"views\">System Controls".$updatediv."</button>
                 <button type=\"submit\" name=\"view\" value=\"Services\" form=\"views\">Services</button>
+                <button type=\"submit\" name=\"view\" value=\"View Log\" form=\"views\">Log</button>
               </div>
               <div class=\"tools-group\">
                 <h3>📂 Data & Files</h3>
@@ -642,7 +686,7 @@ if(isset($_GET['view'])){
       }
     }
   ob_end_flush();
-} else {include('overview.php');}
+} else {include('scripts/now.php');}
 ?>
 <script>
 function myFunction() {
