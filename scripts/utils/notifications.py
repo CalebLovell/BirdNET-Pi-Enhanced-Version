@@ -84,25 +84,33 @@ def in_quiet_hours(settings_dict, hour=None):
     return hour >= start or hour < end
 
 
-def region_rarity_score(sci_name, week):
-    """Expected weekly occurrence for this location (0..1) from the cache
-    written by get_seasonal_expected.py, or None when not cached yet."""
+def is_region_rare(sci_name, week):
+    """Two ways to be region-rare, judged against the species' own profile
+    (mirrors is_region_rare() in scripts/common.php):
+    - vagrant: the location model expects (almost) none here in ANY week, or
+    - out of season: expected almost none now AND well below the species'
+      own seasonal peak at this location.
+    """
     try:
         with open(SEASONAL_CACHE) as f:
             cache = json.load(f)
         freqs = cache.get('data', {}).get(sci_name)
+        if not freqs:
+            return False
+        freqs = [float(v) for v in freqs]
+        annual_max = max(freqs)
+        if annual_max < 0.02:
+            return True
         week = int(week)
-        if freqs and 1 <= week <= len(freqs):
-            return float(freqs[week - 1])
+        idx = max(0, min(len(freqs) - 1, week - 1))
+        return freqs[idx] < REGION_RARE_THRESHOLD and freqs[idx] < 0.25 * annual_max
     except (OSError, TypeError, ValueError, json.JSONDecodeError):
-        pass
-    return None
+        return False
 
 
 def rarity_reason(sci_name, week):
     """Why this detection is rare, or None if it isn't."""
-    score = region_rarity_score(sci_name, week)
-    if score is not None and score < REGION_RARE_THRESHOLD:
+    if is_region_rare(sci_name, week):
         return "rare for your area this week"
     lifetime = get_lifetime_count_for(sci_name)
     if 0 < lifetime <= YARD_RARE_LIFETIME_MAX:

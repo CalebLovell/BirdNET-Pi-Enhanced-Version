@@ -938,9 +938,25 @@ function region_rarity_score_for($sci_name, $week) {
   return isset($data[$sci_name][$idx]) ? (float)$data[$sci_name][$idx] : null;
 }
 
+/* Two ways to be region-rare, both judged against the species' own profile
+   so an uncommon-but-regular resident hovering just under the absolute
+   threshold all year doesn't get flagged every single week:
+   - vagrant: the model expects (almost) none here in ANY week, or
+   - out of season: expected almost none now AND well below the species'
+     own seasonal peak at this location. */
 function is_region_rare($sci_name, $date = null) {
-  $score = region_rarity_score_for($sci_name, birdnet_week($date));
-  return $score !== null && $score < REGION_RARE_THRESHOLD;
+  $data = seasonal_expected_scores();
+  if (!isset($data[$sci_name]) || !is_array($data[$sci_name]) || empty($data[$sci_name])) {
+    return false;
+  }
+  $freqs = array_map('floatval', $data[$sci_name]);
+  $annual_max = max($freqs);
+  if ($annual_max < 0.02) {
+    return true; // vagrant: never really expected at this location
+  }
+  $idx = max(0, min(count($freqs) - 1, birdnet_week($date) - 1));
+  $score = $freqs[$idx];
+  return $score < REGION_RARE_THRESHOLD && $score < 0.25 * $annual_max;
 }
 
 /* ===== Crowned clips: purge protection =====

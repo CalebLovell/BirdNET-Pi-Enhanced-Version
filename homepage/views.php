@@ -47,7 +47,7 @@ if (is_protected_view($current_view)) {
 $page_title = $current_view === 'Now' ? $site_name : $current_view . ' · ' . $site_name;
 
 $updatediv = "";
-if (isset($_SESSION['behind']) && intval($_SESSION['behind']) >= 50 && ($config['SILENCE_UPDATE_INDICATOR'] != 1)) {
+if (isset($_SESSION['behind']) && intval($_SESSION['behind']) >= 50 && (($config['SILENCE_UPDATE_INDICATOR'] ?? '') != 1)) {
   $updatediv = ' <div class="updatenumber">'.$_SESSION["behind"].'</div>';
 }
 

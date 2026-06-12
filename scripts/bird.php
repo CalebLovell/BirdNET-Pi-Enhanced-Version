@@ -283,7 +283,9 @@ if ($bird_sci === '') {
       if (d.prefs) { prefs = { favorite: parseInt(d.prefs.favorite, 10) || 0, muted: parseInt(d.prefs.muted, 10) || 0 }; }
       renderPrefButtons();
       var badges = [];
-      if (d.first_seen === d.last_seen) badges.push('<span class="hero-badge new">NEW SPECIES</span>');
+      // New = first heard within the last week (not merely "heard on one day ever")
+      var firstSeenDays = d.first_seen ? (Date.now() - new Date(d.first_seen + 'T12:00:00').getTime()) / 86400000 : 999;
+      if (firstSeenDays <= 7) badges.push('<span class="hero-badge new">NEW SPECIES</span>');
       if (d.note_count > 0) badges.push('<span class="hero-badge regular">' + d.note_count + ' note' + (d.note_count === 1 ? '' : 's') + '</span>');
       document.getElementById('birdBadges').innerHTML = badges.join(' ');
       document.getElementById('infoLink').href = d.info_url;

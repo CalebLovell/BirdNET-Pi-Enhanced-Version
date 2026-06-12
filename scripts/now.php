@@ -142,7 +142,10 @@ $setup_items = [
   ['done' => $notify_done, 'label' => 'Set up notifications (optional)', 'why' => 'Get pinged for new visits and rare birds.', 'href' => '?view=Settings', 'required' => false],
 ];
 $setup_done_count = count(array_filter($setup_items, function ($i) { return $i['done']; }));
-$show_setup = !$loc_done || !$pwd_done || !$first_detection_done;
+// Gate on the items the station can't work without. Password and
+// notifications stay visible as recommendations while the card shows, but
+// a deliberately password-less station shouldn't see this card forever.
+$show_setup = !$loc_done || !$first_detection_done;
 $visit_explainer = 'A visit groups repeated detections of the same bird. After ' . $gap_minutes
   . ' quiet minute' . ($gap_minutes === 1 ? '' : 's') . ' without that species, the next detection starts a new visit.';
 ?>
