@@ -381,13 +381,14 @@ $visit_explainer = 'A visit groups repeated detections of the same bird. After '
   function renderSpeciesGridCards(data) {
     return (data.species || []).map(function (s) {
       var photo = s.image
-        ? '<img loading="lazy" src="' + esc(s.image) + '" alt="">'
+        ? '<img loading="lazy" src="' + esc(s.image) + '" alt="' + esc(s.name) + '">'
         : '<span class="species-card-noimg" aria-hidden="true">&#119067;</span>';
+      var detailHref = '?view=Bird&sci_name=' + encodeURIComponent(s.sciName);
       return '<div class="species-card-mini">' +
-        '<div class="species-card-photo">' + photo + '</div>' +
+        '<a class="species-card-photo" href="' + detailHref + '" aria-label="Open ' + esc(s.name) + ' details">' + photo + '</a>' +
         '<div class="species-card-head">' +
-          '<span class="species-card-name" title="' + esc(s.name) + '">' + esc(s.name) + '</span>' +
-          '<span class="species-card-stats">' + s.count + ' detections</span>' +
+          '<a class="species-card-name" href="' + detailHref + '" title="' + esc(s.name) + '">' + esc(s.name) + '</a>' +
+          '<span class="species-card-stats">' + s.count + ' detection' + (s.count === 1 ? '' : 's') + '</span>' +
         '</div>' +
         renderHourChart(data.hourly ? data.hourly[s.name] : null, data.weather, data.currentHour) +
         '</div>';

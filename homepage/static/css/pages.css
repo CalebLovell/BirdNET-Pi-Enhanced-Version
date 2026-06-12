@@ -300,6 +300,16 @@
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  color: var(--text-primary);
+}
+
+a.species-card-name:hover {
+  color: var(--accent);
+  font-weight: 600; /* keep weight stable so the row doesn't shift */
+}
+
+a.species-card-photo:hover img {
+  opacity: 0.9;
 }
 
 .species-card-stats {
