@@ -87,6 +87,33 @@
   }
 }
 
+/* ===== Theme toggle (CSS-driven, no load flash) =====
+   Both states exist in the markup; data-theme (set in <head> before paint)
+   decides which is visible, so the correct icon shows from the first frame. */
+.theme-toggle-option {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+}
+
+[data-theme="dark"] .theme-when-light {
+  display: none !important;
+}
+
+html:not([data-theme="dark"]) .theme-when-dark {
+  display: none !important;
+}
+
+/* In the collapsed sidebar, keep the emoji visible but hide the label
+   (the generic collapsed rule hides all button spans, wrappers included) */
+.sidebar.collapsed .sidebar-nav button span.theme-toggle-option {
+  display: inline-flex;
+}
+
+.sidebar.collapsed .sidebar-nav button .theme-toggle-option span {
+  display: none;
+}
+
 /* ===== Palette launch buttons ===== */
 .palette-launch {
   display: flex;

@@ -201,9 +201,14 @@ foreach ($main_nav as $nav_item) {
   echo '<a href="?view=' . rawurlencode($nav_item[0]) . '"' . ($is_active ? ' class="active" aria-current="page"' : '') . '>' . nav_icon($nav_item[1]) . ' <span>' . h($nav_item[2]) . '</span>' . $extra . '</a>';
 }
 ?>
-    <button type="button" id="themeToggleBtn" onclick="toggleTheme()"><span id="theme-toggle-icon" aria-hidden="true">🌗</span> <span id="theme-toggle-text">Theme</span></button>
+    <button type="button" id="themeToggleBtn" onclick="toggleTheme()">
+      <span class="theme-toggle-option theme-when-light">🌙 <span>Dark Mode</span></span>
+      <span class="theme-toggle-option theme-when-dark">☀️ <span>Light Mode</span></span>
+    </button>
     <script>
-      // Dropdown + theme toggle wiring; nav active states are rendered server-side.
+      // Dropdown wiring; nav active states are rendered server-side and the
+      // theme button's two states are toggled purely by CSS via data-theme,
+      // so nothing flashes while the page loads.
       document.addEventListener('DOMContentLoaded', function() {
         const dropdown = document.querySelector('.sidebar-dropdown');
         const toggle = dropdown.querySelector('.sidebar-dropdown-toggle');
@@ -212,16 +217,6 @@ foreach ($main_nav as $nav_item) {
           const isOpen = dropdown.classList.toggle('open');
           toggle.setAttribute('aria-expanded', isOpen ? 'true' : 'false');
         });
-
-        const isDark = document.documentElement.getAttribute('data-theme') === 'dark';
-        const themeIcon = document.getElementById('theme-toggle-icon');
-        const themeText = document.getElementById('theme-toggle-text');
-        if (themeIcon) {
-          themeIcon.innerText = isDark ? '☀️' : '🌙';
-        }
-        if (themeText) {
-          themeText.innerText = isDark ? 'Light Mode' : 'Dark Mode';
-        }
       });
 
       function toggleTheme() {
@@ -229,14 +224,6 @@ foreach ($main_nav as $nav_item) {
         const newTheme = isDark ? 'light' : 'dark';
         localStorage.setItem('birdnet-theme', newTheme);
         document.documentElement.setAttribute('data-theme', newTheme);
-        const themeIcon = document.getElementById('theme-toggle-icon');
-        const themeText = document.getElementById('theme-toggle-text');
-        if (themeIcon) {
-          themeIcon.innerText = newTheme === 'dark' ? '☀️' : '🌙';
-        }
-        if (themeText) {
-          themeText.innerText = newTheme === 'dark' ? 'Light Mode' : 'Dark Mode';
-        }
       }
     </script>
   </nav>
