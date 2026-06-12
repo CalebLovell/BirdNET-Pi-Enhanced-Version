@@ -139,17 +139,32 @@
   padding: 7px 0;
 }
 
+/* Sits beside the hamburger (margin-left:auto absorbs the header's
+   space-between gap) and reads as a real button */
 .palette-launch-mobile {
-  border: none;
-  background: none;
-  cursor: pointer;
+  margin-left: auto;
+  margin-right: 10px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 38px;
+  height: 38px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--bg-secondary, #f1f5f9);
   color: var(--text-primary);
-  padding: 6px;
+  cursor: pointer;
+  padding: 0;
+  flex-shrink: 0;
+}
+
+.palette-launch-mobile:hover {
+  background: var(--bg-button-hover, #e2e8f0);
 }
 
 .palette-launch-mobile .nav-icon {
-  width: 22px;
-  height: 22px;
+  width: 19px;
+  height: 19px;
 }
 
 /* ===== Command palette (Ctrl+K) ===== */
