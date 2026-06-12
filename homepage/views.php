@@ -130,7 +130,6 @@ function nav_icon($name) {
   <div class="sidebar-logo">
     <img src="images/bnp.png" alt="BirdNET-Pi logo">
   </div>
-  <a href="?view=Doctor" class="health-pill unknown" aria-label="Station health"><span class="health-dot" aria-hidden="true"></span><span class="health-text">&hellip;</span></a>
   <button type="button" class="icon palette-launch-mobile" onclick="window.BirdNETPalette && BirdNETPalette.show()" aria-label="Search pages and species"><?php echo nav_icon('search'); ?></button>
   <button type="button" class="icon" onclick="myFunction()" aria-label="Toggle navigation menu"><img src="images/menu.png" alt=""></button>
 </div>
@@ -362,36 +361,12 @@ foreach ($main_nav as $nav_item) {
         }
       });
   }
-  function refreshHealthPill() {
-    fetch('api/v1/station/doctor?_=' + Date.now(), { headers: { 'Accept': 'application/json' } })
-      .then(r => {
-        if (!r.ok) throw new Error('doctor request failed');
-        return r.json();
-      })
-      .then(data => {
-        const firstIssue = (data.checks || []).find(c => c.status !== 'ok');
-        document.querySelectorAll('.health-pill').forEach(pill => {
-          pill.classList.remove('ok', 'warn', 'error', 'unknown');
-          pill.classList.add(data.status || 'unknown');
-          const text = pill.querySelector('.health-text');
-          if (text) {
-            text.textContent = data.status === 'ok' ? 'Station healthy' : (firstIssue ? firstIssue.label : 'Check station');
-          }
-          pill.title = firstIssue ? firstIssue.message : 'All systems normal';
-        });
-      })
-      .catch(() => {
-        // Keep the last known state on transient failures.
-      });
-  }
   document.addEventListener("DOMContentLoaded", function() {
     refreshLiveFeed();
     refreshLiveWeather();
-    refreshHealthPill();
     // 10s keeps the sidebar in step with the Live page's "Now hearing" ticker
     setInterval(refreshLiveFeed, 10000);
     setInterval(refreshLiveWeather, 60000);
-    setInterval(refreshHealthPill, 30000);
   });
   </script>
 
