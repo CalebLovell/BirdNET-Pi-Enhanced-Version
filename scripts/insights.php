@@ -179,9 +179,16 @@ if ($subview == 'migration' && isset($_GET['seasonal_batch'])) {
 /* Serve repeat views from the fragment cache. Keyed on the detections
    watermark so any new detection invalidates it automatically; date/hour keep
    "today" sections and weather data fresh; the file mtime invalidates after
-   code updates. The seasonal_batch AJAX branch above bypasses this cache. */
+   code updates. The seasonal_batch AJAX branch above bypasses this cache.
+   The report subview also varies by its period type and anchor date, and is
+   rendered by reports.php, so both are part of the key (otherwise weekly,
+   monthly, and yearly would collide on one cached entry). */
+$report_type = isset($_GET['type']) ? $_GET['type'] : '';
+$report_date = isset($_GET['date']) ? $_GET['date'] : '';
+$reports_mtime = @filemtime(__ROOT__ . '/scripts/reports.php');
 $insights_cache_key = birdnet_cache_key(
     'insights', $subview, $seasonal_species_offset, $migration_list_limit,
+    $report_type, $report_date, $reports_mtime,
     date('Y-m-d'), date('G'), detections_watermark(), filemtime(__FILE__)
 );
 $insights_cached = birdnet_cache_get($insights_cache_key);

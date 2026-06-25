@@ -73,6 +73,14 @@ check "insights dashboard takeaways" 200 "/?view=Insights&subview=dashboard"
 check_contains "plain english card" "In plain English"
 check "insights behavior takeaways" 200 "/?view=Insights&subview=behavior"
 check_contains "behavior takeaway present" "dawn chorus"
+# Reports: each period must render its own report (the cache key once collided
+# weekly/monthly/yearly into one entry)
+check "report weekly" 200 "/?view=Insights&subview=report&type=weekly"
+check_contains "weekly report title" "Week"
+check "report monthly" 200 "/?view=Insights&subview=report&type=monthly"
+check_contains "monthly report title" "Monthly Report"
+check "report yearly" 200 "/?view=Insights&subview=report&type=yearly"
+check_contains "yearly report title" "Yearly Report"
 check "ebird preview" 200 "/api/v1/exports/ebird/preview"
 check_contains "preview has row_count" '"row_count"'
 check "settings page has quiet hours" 200 "/?view=Settings" -u "$AUTH"

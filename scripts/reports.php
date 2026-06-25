@@ -77,40 +77,46 @@ $prior_end_str = date("Y-m-d", $prior_end);
 $db = new SQLite3('./scripts/birds.db', SQLITE3_OPEN_READONLY);
 $db->busyTimeout(1000);
 
-// 1. Fetch species counts for the current period
+// 1. Species counts for the current period
 $stmt1 = $db->prepare('SELECT Sci_Name, Com_Name, COUNT(*) as cnt FROM detections WHERE Date BETWEEN :start AND :end GROUP BY Sci_Name ORDER BY cnt DESC');
 $stmt1->bindValue(':start', $start_str);
 $stmt1->bindValue(':end', $end_str);
 ensure_db_ok($stmt1);
 $result1 = db_execute_safe($db, $stmt1, 'reports species counts');
+$period_species = [];
+while ($row = db_fetch_assoc_safe($result1)) {
+    $period_species[] = $row;
+}
+
+// 2. Prior-period counts for every species in ONE grouped query, and 3. the
+//    earliest-ever date per species in ONE more. This replaces a per-species
+//    N+1 (two COUNTs each) that made yearly reports slow with a large list.
+$prior_counts = [];
+$stmt_pc = $db->prepare('SELECT Sci_Name, COUNT(*) as cnt FROM detections WHERE Date BETWEEN :pstart AND :pend GROUP BY Sci_Name');
+$stmt_pc->bindValue(':pstart', $prior_start_str);
+$stmt_pc->bindValue(':pend', $prior_end_str);
+$pc_res = db_execute_safe($db, $stmt_pc, 'reports prior species counts');
+while ($row = db_fetch_assoc_safe($pc_res)) {
+    $prior_counts[$row['Sci_Name']] = (int)$row['cnt'];
+}
+
+$first_dates = [];
+$fd_res = db_query_safe($db, 'SELECT Sci_Name, MIN(Date) as first_date FROM detections GROUP BY Sci_Name', 'reports first dates');
+while ($row = db_fetch_assoc_safe($fd_res)) {
+    $first_dates[$row['Sci_Name']] = $row['first_date'];
+}
 
 $detections = [];
-while ($row = db_fetch_assoc_safe($result1)) {
+foreach ($period_species as $row) {
     $sci_name = $row['Sci_Name'];
-    $com_name = $row['Com_Name'];
-    $count = $row['cnt'];
-
-    // 2. Prior period comparison
-    $stmt2 = $db->prepare('SELECT COUNT(*) as cnt FROM detections WHERE Sci_Name = :sci AND Date BETWEEN :pstart AND :pend');
-    $stmt2->bindValue(':sci', $sci_name);
-    $stmt2->bindValue(':pstart', $prior_start_str);
-    $stmt2->bindValue(':pend', $prior_end_str);
-    $prior_row = db_fetch_assoc_safe(db_execute_safe($db, $stmt2, 'reports prior species count'));
-    $prior_count = (int)($prior_row['cnt'] ?? 0);
-
-    // 3. Check if first seen (never seen before this period)
-    $stmt3 = $db->prepare('SELECT COUNT(*) as cnt FROM detections WHERE Sci_Name = :sci AND Date < :start');
-    $stmt3->bindValue(':sci', $sci_name);
-    $stmt3->bindValue(':start', $start_str);
-    $seen_row = db_fetch_assoc_safe(db_execute_safe($db, $stmt3, 'reports seen before count'));
-    $ever_seen_before = (int)($seen_row['cnt'] ?? 0);
-
+    $first_date = isset($first_dates[$sci_name]) ? $first_dates[$sci_name] : null;
     $detections[] = [
-        'name' => $com_name,
+        'name' => $row['Com_Name'],
         'sci' => $sci_name,
-        'count' => $count,
-        'prior_count' => $prior_count,
-        'is_first_seen' => ($ever_seen_before == 0)
+        'count' => $row['cnt'],
+        'prior_count' => isset($prior_counts[$sci_name]) ? $prior_counts[$sci_name] : 0,
+        // first seen this period = its earliest-ever detection is within it
+        'is_first_seen' => ($first_date !== null && $first_date >= $start_str)
     ];
 }
 
