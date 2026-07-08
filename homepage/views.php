@@ -162,7 +162,7 @@ $insights_items = [
   ['Year', null, 'award', 'Year in Birds'],
 ];
 $main_nav = [
-  ['Now', 'home', 'Now'],
+  ['Now', 'home', 'Today'],
   ['Live', 'activity', 'Live'],
   ['Timeline', 'clock', 'Timeline'],
   ['Species', 'bird', 'Birds'],
@@ -767,7 +767,7 @@ installKeyAndSwipeEventHandler();
 <nav class="bottom-nav" aria-label="Quick navigation">
 <?php
 $bottom_nav = [
-  ['Now', 'home', 'Now'],
+  ['Now', 'home', 'Today'],
   ['Timeline', 'clock', 'Timeline'],
   ['Species', 'bird', 'Birds'],
   ['Review', 'search', 'Review'],

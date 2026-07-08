@@ -4,7 +4,7 @@
   'use strict';
 
   var VIEWS = [
-    { label: 'Now', href: '?view=Now' },
+    { label: 'Today', href: '?view=Now' },
     { label: 'Live', href: '?view=Live' },
     { label: 'Timeline', href: '?view=Timeline' },
     { label: 'Birds (species gallery)', href: '?view=Species' },
