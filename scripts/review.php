@@ -163,11 +163,21 @@ require_once 'scripts/common.php';
       box.innerHTML = '<div class="review-examples-label">' + label + '</div>' +
         '<div class="review-examples-row">' + examples.map(function (ex) {
           return '<figure class="review-example">' +
-            '<img loading="lazy" src="' + clipUrl(ex.clip_path, '.png') + '" alt="Reference spectrogram" onerror="this.parentNode.style.display=\'none\'">' +
+            '<img loading="lazy" src="' + clipUrl(ex.clip_path, '.png') + '" alt="Reference spectrogram">' +
             '<figcaption>' + Math.round(ex.confidence * 100) + '%' + (ex.source === 'confirmed' ? ' &#10003;' : '') + '</figcaption>' +
             '<audio controls preload="none" src="' + clipUrl(ex.clip_path) + '"></audio>' +
             '</figure>';
         }).join('') + '</div>';
+      // If a clip vanished from disk anyway (purged since the API answered),
+      // drop its figure - and if none survive, drop the label rather than
+      // leaving an orphaned "Compare with..." heading over an empty row.
+      box.querySelectorAll('.review-example img').forEach(function (img) {
+        img.addEventListener('error', function () {
+          var fig = img.closest('figure');
+          if (fig) fig.parentNode.removeChild(fig);
+          if (!box.querySelector('.review-example')) box.innerHTML = '';
+        });
+      });
     };
     if (exampleCache[v.sci_name]) {
       renderExamples(exampleCache[v.sci_name]);

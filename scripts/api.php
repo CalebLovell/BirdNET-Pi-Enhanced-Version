@@ -1107,20 +1107,35 @@ if (preg_match('#^/api/v1/system/health$#', $requestUri)) {
   $examples = [];
   $seen = [];
 
+  /* Old clips get purged as the disk fills, but the DB rows remain - so the
+     strongest matches on record often no longer exist on disk. Offering those
+     renders an empty comparison strip. Only return examples whose audio file
+     is still present. When the By_Date dir itself is absent (dev harness),
+     existence can't be checked, so skip the filter. */
+  $clip_base = rtrim((string)($_SERVER['DOCUMENT_ROOT'] ?? ''), '/\\') . '/By_Date';
+  $clip_check = is_dir($clip_base);
+  $clip_exists = function ($rel) use ($clip_base, $clip_check) {
+    return !$clip_check || file_exists($clip_base . '/' . $rel);
+  };
+
   if (spine_table_exists($db, 'detection_reviews')) {
     $ex_stmt = $db->prepare("SELECT r.file_name, r.date, r.com_name, d.Confidence
       FROM detection_reviews r JOIN detections d ON d.File_Name = r.file_name
       WHERE r.sci_name = :sci AND r.status = 'confirmed' AND r.file_name != :exclude
-      ORDER BY d.Confidence DESC LIMIT 3");
+      ORDER BY d.Confidence DESC LIMIT 12");
     if ($ex_stmt) {
       $ex_stmt->bindValue(':sci', $sci, SQLITE3_TEXT);
       $ex_stmt->bindValue(':exclude', $exclude, SQLITE3_TEXT);
       $ex_res = db_execute_safe($db, $ex_stmt, 'review examples confirmed');
-      while ($row = db_fetch_assoc_safe($ex_res)) {
+      while (count($examples) < 3 && ($row = db_fetch_assoc_safe($ex_res))) {
+        $rel = detection_clip_relative_path($row['date'], $row['com_name'], $row['file_name']);
+        if (!$clip_exists($rel)) {
+          continue;
+        }
         $seen[$row['file_name']] = true;
         $examples[] = [
           'file' => $row['file_name'],
-          'clip_path' => detection_clip_relative_path($row['date'], $row['com_name'], $row['file_name']),
+          'clip_path' => $rel,
           'confidence' => round((float)$row['Confidence'], 4),
           'source' => 'confirmed'
         ];
@@ -1131,7 +1146,7 @@ if (preg_match('#^/api/v1/system/health$#', $requestUri)) {
   if (count($examples) < 3) {
     $fb_stmt = $db->prepare('SELECT File_Name, Date, Com_Name, Confidence FROM detections
       WHERE Sci_Name = :sci AND File_Name != :exclude AND Confidence >= 0.9
-      ORDER BY Confidence DESC LIMIT 6');
+      ORDER BY Confidence DESC LIMIT 40');
     if ($fb_stmt) {
       $fb_stmt->bindValue(':sci', $sci, SQLITE3_TEXT);
       $fb_stmt->bindValue(':exclude', $exclude, SQLITE3_TEXT);
@@ -1140,13 +1155,48 @@ if (preg_match('#^/api/v1/system/health$#', $requestUri)) {
         if (isset($seen[$row['File_Name']])) {
           continue;
         }
+        $rel = detection_clip_relative_path($row['Date'], $row['Com_Name'], $row['File_Name']);
+        if (!$clip_exists($rel)) {
+          continue;
+        }
         $examples[] = [
           'file' => $row['File_Name'],
-          'clip_path' => detection_clip_relative_path($row['Date'], $row['Com_Name'], $row['File_Name']),
+          'clip_path' => $rel,
           'confidence' => round((float)$row['Confidence'], 4),
           'source' => 'high_confidence'
         ];
       }
+    }
+  }
+
+  /* Recent detections are the most likely to still be on disk; if nothing
+     high-confidence survived the purge, fall back to the best recent clips
+     so the strip is never needlessly empty. */
+  if (count($examples) === 0 && $clip_check) {
+    $rc_stmt = $db->prepare('SELECT File_Name, Date, Com_Name, Confidence FROM detections
+      WHERE Sci_Name = :sci AND File_Name != :exclude
+      ORDER BY Date DESC, Time DESC LIMIT 40');
+    if ($rc_stmt) {
+      $rc_stmt->bindValue(':sci', $sci, SQLITE3_TEXT);
+      $rc_stmt->bindValue(':exclude', $exclude, SQLITE3_TEXT);
+      $rc_res = db_execute_safe($db, $rc_stmt, 'review examples recent');
+      $recent = [];
+      while ($row = db_fetch_assoc_safe($rc_res)) {
+        $rel = detection_clip_relative_path($row['Date'], $row['Com_Name'], $row['File_Name']);
+        if (!$clip_exists($rel)) {
+          continue;
+        }
+        $recent[] = [
+          'file' => $row['File_Name'],
+          'clip_path' => $rel,
+          'confidence' => round((float)$row['Confidence'], 4),
+          'source' => 'high_confidence'
+        ];
+      }
+      usort($recent, function ($a, $b) {
+        return $b['confidence'] <=> $a['confidence'];
+      });
+      $examples = array_slice($recent, 0, 3);
     }
   }
 
