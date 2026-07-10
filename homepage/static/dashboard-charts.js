@@ -26,9 +26,11 @@
         var xhr = new XMLHttpRequest();
         xhr.onload = function () {
             if (xhr.status === 200 && xhr.responseText.length > 0) {
+                // Parse and render fail differently: a bad response is worth
+                // retrying, a rendering bug is deterministic and is not.
+                var data;
                 try {
-                    var data = JSON.parse(xhr.responseText);
-                    callback(data);
+                    data = JSON.parse(xhr.responseText);
                 } catch (e) {
                     // Log what actually came back - the raw body is the only
                     // way to diagnose a corrupted response after the fact.
@@ -36,6 +38,13 @@
                         xhr.responseText.length + ' bytes). Body starts with: ' +
                         JSON.stringify(xhr.responseText.slice(0, 300)), e);
                     retryOrFail('The station could not send heatmap data. It usually recovers on its own — try again in a moment.');
+                    return;
+                }
+                try {
+                    callback(data);
+                } catch (e2) {
+                    console.error('Dashboard charts: rendering failed', e2);
+                    if (errorCallback) errorCallback('The heatmap could not be drawn. Refresh the page; if this keeps happening, check the browser console.');
                 }
             } else {
                 retryOrFail('The station database is busy right now. It usually recovers on its own — try again in a moment.');
@@ -50,10 +59,25 @@
     }
 
     function renderHeatmap(canvas, data) {
+        // Never replace the parent's innerHTML for the empty state: that
+        // destroys the canvas, and every later cycle then crashes on the
+        // detached element (the bug once misreported as a JSON parse error).
+        var host = canvas.parentElement;
+        if (!host) return;
+        var emptyMsg = host.querySelector('.heatmap-empty-msg');
         if (!data || !data.species || data.species.length === 0) {
-            canvas.parentElement.innerHTML = '<p style="text-align:center;padding:20px;color:#888;">No species yet today.</p>';
+            canvas.style.display = 'none';
+            if (!emptyMsg) {
+                emptyMsg = document.createElement('p');
+                emptyMsg.className = 'heatmap-empty-msg';
+                emptyMsg.style.cssText = 'text-align:center;padding:20px;color:#888;';
+                emptyMsg.textContent = 'No species yet today.';
+                host.appendChild(emptyMsg);
+            }
             return;
         }
+        if (emptyMsg) emptyMsg.parentNode.removeChild(emptyMsg);
+        canvas.style.display = '';
 
         var species = data.species;
         var hourly = data.hourly;
@@ -260,6 +284,7 @@
 
     // Tooltip for heatmap canvas
     function addHeatmapTooltip(canvas) {
+        if (!canvas.parentElement) return;
         var tooltip = document.createElement('div');
         tooltip.className = 'chart-tooltip';
         tooltip.style.cssText = 'display:none;position:absolute;background:rgba(0,0,0,0.8);color:#fff;padding:6px 10px;border-radius:4px;font-size:12px;pointer-events:none;z-index:100;white-space:nowrap;';
