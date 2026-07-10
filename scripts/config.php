@@ -495,7 +495,7 @@ function runProcess() {
           </select></td>
         </tr>
         <tr>
-          <td><label for="number_format">Numbers:</label></td>
+          <td><label for="number_format">Number format:</label></td>
           <td><select name="number_format">
             <option value="point" <?php if (get_number_format() === 'point') echo 'selected'; ?>>1,234.5</option>
             <option value="comma" <?php if (get_number_format() === 'comma') echo 'selected'; ?>>1.234,5</option>
