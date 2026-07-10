@@ -143,7 +143,7 @@ function render_species_cards($species_list, $image_provider, $fallback_provider
         }
 
         $info = get_info_url($sci_name);
-        $wiki_url = 'https://wikipedia.org/wiki/' . str_replace('%20', '_', rawurlencode($sci_name));
+        $wiki_url = get_wikipedia_url($sci_name);
 ?>
             <div class="bird-card">
                 <a class="bird-image-container" href="?view=Bird&amp;sci_name=<?php echo rawurlencode($sci_name); ?>">

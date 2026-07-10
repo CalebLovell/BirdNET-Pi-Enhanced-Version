@@ -417,7 +417,7 @@ if(isset($_GET['ajax_detections']) && $_GET['ajax_detections'] == "true" && isse
             <span class="mrd-sci"><?php echo $mostrecent['Sci_Name'];?></span>
             <div class="mrd-links">
               <a href="<?php echo $url; ?>" target="_blank" class="mrd-link-pill"><img src="images/info.png"> Info</a>
-              <a href="https://wikipedia.org/wiki/<?php echo $sciname; ?>" target="_blank" class="mrd-link-pill"><img src="images/wiki.png"> Wikipedia</a>
+              <a href="<?php echo get_wikipedia_url($sciname); ?>" target="_blank" class="mrd-link-pill"><img src="images/wiki.png"> Wikipedia</a>
               <button class="mrd-link-pill" onclick="generateMiniGraph(this, '<?php echo $comnamegraph; ?>')"><img src="images/chart.svg"> Stats</button>
             </div>
             <span class="mrd-conf <?php echo $conf_class; ?>"><?php echo $conf_pct; ?></span>

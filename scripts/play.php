@@ -1010,7 +1010,7 @@ $url = $info_url['URL'];
         <div class="sci-name"><?php echo htmlspecialchars($sciname); ?></div>
         <div class="info-links">
             <a href="<?php echo $url; ?>" target="_blank"><img src="images/info.png"> Info</a>
-            <a href="https://wikipedia.org/wiki/<?php echo urlencode($sciname); ?>" target="_blank"><img src="images/wiki.png"> Wikipedia</a>
+            <a href="<?php echo get_wikipedia_url($sciname); ?>" target="_blank"><img src="images/wiki.png"> Wikipedia</a>
         </div>
     </div>
 
@@ -1137,7 +1137,7 @@ echo "</div>"; // close recording-detail-wrap
       <tr><th>$name<br>
       <i>$sciname</i><br>
           <a href=\"$url\" target=\"_blank\"><img title=\"$url_title\" src=\"images/info.png\" width=\"20\"></a>
-          <a href=\"https://wikipedia.org/wiki/$sciname\" target=\"_blank\"><img title=\"Wikipedia\" src=\"images/wiki.png\" width=\"20\"></a>
+          <a href=\"".get_wikipedia_url($sciname)."\" target=\"_blank\"><img title=\"Wikipedia\" src=\"images/wiki.png\" width=\"20\"></a>
       </th></tr>";
       while($results=db_fetch_assoc_safe($result2))
       {

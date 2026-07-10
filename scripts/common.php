@@ -660,6 +660,24 @@ class Wikipedia extends ImageProvider {
   }
 }
 
+/* Wikipedia link in the user's DATABASE_LANG edition (the setting that
+   already localizes species common names; eBird links follow it too).
+   Scientific-name URLs redirect to the local article in every sizable
+   edition, so no per-language title lookup is needed. Only outbound links
+   localize - the image/summary fetchers stay on en.wikipedia, where photo
+   coverage is best. */
+function get_wikipedia_url($sciname) {
+  $config = get_config();
+  $lang = isset($config['DATABASE_LANG']) ? strtolower(trim($config['DATABASE_LANG'])) : '';
+  // Subdomains are the tag's language part: pt-BR -> pt. 'not-selected'
+  // (and anything else non-language-shaped) falls back to English.
+  $lang = substr($lang, 0, 2);
+  if (!preg_match('/^[a-z]{2}$/', $lang) || (isset($config['DATABASE_LANG']) && $config['DATABASE_LANG'] === 'not-selected')) {
+    $lang = 'en';
+  }
+  return 'https://' . $lang . '.wikipedia.org/wiki/' . str_replace('%20', '_', rawurlencode($sciname));
+}
+
 function get_info_url($sciname){
   $engname = get_com_en_name($sciname);
   $config = get_config();

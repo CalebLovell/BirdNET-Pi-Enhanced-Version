@@ -271,7 +271,7 @@ if (preg_match('#^/api/v1/system/health$#', $requestUri)) {
       'first_detected' => $row['FirstDate'],
       'info_url' => $info['URL'],
       'info_title' => $info['TITLE'],
-      'wikipedia_url' => 'https://wikipedia.org/wiki/' . str_replace('%20', '_', rawurlencode($row['Sci_Name']))
+      'wikipedia_url' => get_wikipedia_url($row['Sci_Name'])
     ];
   }
   if (isset($_GET['format']) && $_GET['format'] === 'csv') {
@@ -888,7 +888,7 @@ if (preg_match('#^/api/v1/system/health$#', $requestUri)) {
     'note_count' => $note_count,
     'info_url' => $info_url['URL'],
     'info_title' => $info_url['TITLE'],
-    'wikipedia_url' => 'https://wikipedia.org/wiki/' . str_replace('%20', '_', rawurlencode($sci)),
+    'wikipedia_url' => get_wikipedia_url($sci),
     'generated_at' => date('c')
   ]);
 

@@ -235,7 +235,7 @@ if(isset($_GET['ajax_detections']) && $_GET['ajax_detections'] == "true"  ) {
           <b><a class="a2" href="<?php echo h($url);?>" target="top"><?php echo h($todaytable['Com_Name']);?></a></b><br>
           <i><?php echo h($todaytable['Sci_Name']);?></i>
           <a href="<?php echo h($url);?>" target="_blank"><img style="cursor:pointer;float:unset;display:inline" title="<?php echo h($url_title);?>" src="images/info.png" width="20"></a>
-          <a href="https://wikipedia.org/wiki/<?php echo urlencode($sciname);?>" target="_blank"><img style=";cursor:pointer;float:unset;display:inline" title="Wikipedia" src="images/wiki.png" width="20"></a>
+          <a href="<?php echo get_wikipedia_url($sciname);?>" target="_blank"><img style=";cursor:pointer;float:unset;display:inline" title="Wikipedia" src="images/wiki.png" width="20"></a>
           <img style=";cursor:pointer;float:unset;display:inline" title="View species stats" onclick="generateMiniGraph(this, <?php echo js_arg($todaytable['Com_Name']); ?>)" width=20 src="images/chart.svg"><br>
           <b>Confidence:</b> <?php echo round((float)round($todaytable['Confidence'],2) * 100 ) . '%';?><br></div><br>
           <div class='custom-audio-player' data-audio-src="<?php echo h($filename); ?>" data-image-src="<?php echo h($filename.".png");?>"></div>
@@ -259,7 +259,7 @@ if(isset($_GET['ajax_detections']) && $_GET['ajax_detections'] == "true"  ) {
 	                <br>
 	                    <a href="<?php echo h($url);?>" target="_blank"><img style="height: 1em;cursor:pointer;float:unset;display:inline" title="<?php echo h($url_title);?>" src="images/info.png" width="25"></a>
       	    <?php if($_GET['kiosk'] == false){?>
-	              <a href="https://wikipedia.org/wiki/<?php echo urlencode($sciname);?>" target="_blank"><img style="height: 1em;cursor:pointer;float:unset;display:inline" title="Wikipedia" src="images/wiki.png" width="25"></a>
+	              <a href="<?php echo get_wikipedia_url($sciname);?>" target="_blank"><img style="height: 1em;cursor:pointer;float:unset;display:inline" title="Wikipedia" src="images/wiki.png" width="25"></a>
 	                    <img style="height: 1em;cursor:pointer;float:unset;display:inline" title="View species stats" onclick="generateMiniGraph(this, <?php echo js_arg($todaytable['Com_Name']); ?>)" width=25 src="images/chart.svg">
 	                    <a target="_blank" href="index.php?filename=<?php echo urlencode($todaytable['File_Name']); ?>"><img style="height: 1em;cursor:pointer;float:unset;display:inline" class="copyimage-mobile" title="Open in new tab" width=16 src="images/copy.png"></a>
           	    <?php } ?></i>
