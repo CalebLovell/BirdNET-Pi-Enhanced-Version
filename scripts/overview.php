@@ -13,7 +13,17 @@ $myDate = date('Y-m-d');
 $chart = "Combo-$myDate.png";
 
 $db = new SQLite3('./scripts/birds.db', SQLITE3_OPEN_READONLY);
-$db->busyTimeout(1000);
+$db->busyTimeout(5000);
+
+/* JSON endpoints must fail as JSON: ensure_db_ok() echoes an HTML notice,
+   which corrupts the response and surfaces as a parse error in the UI. */
+function ensure_db_ok_json($sql_stmt) {
+  if ($sql_stmt == false) {
+    http_response_code(503);
+    echo json_encode(['error' => 'Database is busy']);
+    die();
+  }
+}
 
 function get_overview_weather($db, $date) {
   $weather = [];
@@ -119,7 +129,7 @@ if(isset($_GET['ajax_chart_data']) && $_GET['ajax_chart_data'] == "true") {
   // Species aggregate: name, count, max confidence.
   // Detections reviewed as false positives (or hidden) are excluded.
   $stmt1 = $db->prepare("SELECT Com_Name, Sci_Name, COUNT(*) as cnt, MAX(Confidence) as maxConf FROM detections WHERE Date = DATE('now','localtime')" . and_review_exclusion($db) . " GROUP BY Sci_Name ORDER BY cnt DESC");
-  ensure_db_ok($stmt1);
+  ensure_db_ok_json($stmt1);
   $res1 = db_execute_safe($db, $stmt1, 'overview chart species');
     // For image fetching
     $image_provider = null;
@@ -172,7 +182,7 @@ if(isset($_GET['ajax_chart_data']) && $_GET['ajax_chart_data'] == "true") {
 
   // Hourly breakdown per species (same review exclusion as the aggregate)
   $stmt2 = $db->prepare("SELECT Com_Name, CAST(strftime('%H', Time) AS INTEGER) as hour, COUNT(*) as cnt FROM detections WHERE Date = DATE('now','localtime')" . and_review_exclusion($db) . " GROUP BY Com_Name, hour");
-  ensure_db_ok($stmt2);
+  ensure_db_ok_json($stmt2);
   $res2 = db_execute_safe($db, $stmt2, 'overview chart hourly');
   $hourly = [];
   while ($row = db_fetch_assoc_safe($res2)) {
@@ -188,7 +198,7 @@ if(isset($_GET['ajax_chart_data']) && $_GET['ajax_chart_data'] == "true") {
       $db->close();
       sync_overview_weather($home, get_user());
       $db = new SQLite3('./scripts/birds.db', SQLITE3_OPEN_READONLY);
-      $db->busyTimeout(1000);
+      $db->busyTimeout(5000);
       $weather = get_overview_weather($db, $today);
   }
 
@@ -201,7 +211,7 @@ if(isset($_GET['ajax_new_species_details']) && $_GET['ajax_new_species_details']
   
   // Specific query for New Species Today
   $stmt = $db->prepare("SELECT Com_Name, Sci_Name FROM detections WHERE Date = DATE('now', 'localtime') AND Sci_Name NOT IN (SELECT DISTINCT Sci_Name FROM detections WHERE Date < DATE('now', 'localtime')) GROUP BY Sci_Name ORDER BY Com_Name ASC");
-  ensure_db_ok($stmt);
+  ensure_db_ok_json($stmt);
   $res = db_execute_safe($db, $stmt, 'overview new species details');
 
   $image_provider = null;

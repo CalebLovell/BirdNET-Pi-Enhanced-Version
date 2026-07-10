@@ -10,7 +10,19 @@
     var heatmapChart = null;
     var imageCache = {};
 
-    function fetchChartData(callback, errorCallback) {
+    function fetchChartData(callback, errorCallback, attempt) {
+        attempt = attempt || 1;
+        // A busy station database (e.g. the analyzer writing) makes the
+        // endpoint fail transiently; retry once before bothering the user.
+        var retryOrFail = function (message) {
+            if (attempt < 2) {
+                setTimeout(function () {
+                    fetchChartData(callback, errorCallback, attempt + 1);
+                }, 2000);
+            } else if (errorCallback) {
+                errorCallback(message);
+            }
+        };
         var xhr = new XMLHttpRequest();
         xhr.onload = function () {
             if (xhr.status === 200 && xhr.responseText.length > 0) {
@@ -19,15 +31,15 @@
                     callback(data);
                 } catch (e) {
                     console.warn('Dashboard charts: could not parse JSON', e);
-                    if (errorCallback) errorCallback('Heatmap data could not be parsed.');
+                    retryOrFail('The station could not send heatmap data. It usually recovers on its own — try again in a moment.');
                 }
-            } else if (errorCallback) {
-                errorCallback('Heatmap data could not be loaded.');
+            } else {
+                retryOrFail('The station database is busy right now. It usually recovers on its own — try again in a moment.');
             }
         };
         xhr.onerror = function () {
             console.warn('Dashboard charts: request failed');
-            if (errorCallback) errorCallback('Heatmap request failed.');
+            retryOrFail('The heatmap request failed. Check that the station is reachable, then try again.');
         };
         xhr.open('GET', 'overview.php?ajax_chart_data=true', true);
         xhr.send();
@@ -35,7 +47,7 @@
 
     function renderHeatmap(canvas, data) {
         if (!data || !data.species || data.species.length === 0) {
-            canvas.parentElement.innerHTML = '<p style="text-align:center;padding:20px;color:#888;">No data available.</p>';
+            canvas.parentElement.innerHTML = '<p style="text-align:center;padding:20px;color:#888;">No species yet today.</p>';
             return;
         }
 
