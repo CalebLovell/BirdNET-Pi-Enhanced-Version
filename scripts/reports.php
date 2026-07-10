@@ -153,7 +153,7 @@ $stmt_ph = $db->prepare('SELECT strftime("%H", Time) as hr, COUNT(*) as cnt FROM
 $stmt_ph->bindValue(':start', $start_str);
 $stmt_ph->bindValue(':end', $end_str);
 $ph_res = db_fetch_assoc_safe(db_execute_safe($db, $stmt_ph, 'reports peak hour'));
-$peak_time = $ph_res ? $ph_res['hr'] . ":00" : 'N/A';
+$peak_time = $ph_res ? format_hour_label((int)$ph_res['hr']) : 'N/A';
 
 function get_trend_html($current, $prior) {
     if ($prior == 0) return $current > 0 ? '<span class="trend up">NEW</span>' : '';

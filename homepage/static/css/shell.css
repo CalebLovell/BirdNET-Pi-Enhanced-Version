@@ -486,3 +486,39 @@ html:not([data-theme="dark"]) .theme-when-dark {
 .feed-item.feed-active .feed-species {
   color: var(--text-heading);
 }
+
+/* Optional station label under the sidebar logo (Settings > Display & Units) */
+.sidebar-logo {
+  flex-wrap: wrap;
+}
+
+.sidebar-site-name {
+  flex-basis: 100%;
+  font-size: 0.85em;
+  font-weight: 600;
+  color: var(--text-secondary, #6b7280);
+  line-height: 1.2;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sidebar.collapsed .sidebar-site-name {
+  display: none;
+}
+
+/* Owner-authored info box at the top of the Today page */
+.custom-info-box {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  box-shadow: var(--shadow-sm);
+  padding: 16px 20px;
+  margin-bottom: 20px;
+  color: var(--text-primary);
+  overflow-wrap: break-word;
+}
+
+.custom-info-box img {
+  max-width: 100%;
+}

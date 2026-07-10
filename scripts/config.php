@@ -122,6 +122,18 @@ if(isset($_GET["latitude"])){
     $apprise_quiet_end = "";
   }
 
+  # Display & units
+  $temperature_unit = (isset($_GET['temperature_unit']) && $_GET['temperature_unit'] === 'celsius') ? 'celsius' : 'fahrenheit';
+  $wind_speed_unit = (isset($_GET['wind_speed_unit']) && in_array($_GET['wind_speed_unit'], ['kmh', 'ms'], true)) ? $_GET['wind_speed_unit'] : 'mph';
+  $time_format = (isset($_GET['time_format']) && $_GET['time_format'] === '24') ? '24' : '12';
+  $sidebar_site_name = isset($_GET['sidebar_site_name']) ? 1 : 0;
+  // Front-page info box: owner-authored HTML, stored in its own file (a
+  // multi-line blob can't live in the bash-sourced birdnet.conf).
+  if (isset($_GET['custom_info_html'])) {
+    $custom_info_html = trim(htmlspecialchars_decode($_GET['custom_info_html'], ENT_QUOTES));
+    @file_put_contents(custom_info_path(), $custom_info_html);
+  }
+
   if(isset($timezone) && in_array($timezone, DateTimeZone::listIdentifiers())) {
     # dpkg-reconfigure tzdata is a pain to run non-interactively, so we do it in two steps instead
     # tzlocal.get_localzone() will fail if the Debian specific /etc/timezone is not in sync
@@ -171,6 +183,10 @@ if(isset($_GET["latitude"])){
   $contents = preg_replace("/APPRISE_VISIT_GROUPING=.*/", "APPRISE_VISIT_GROUPING=$apprise_visit_grouping", $contents);
   $contents = preg_replace("/APPRISE_QUIET_HOURS_START=.*/", "APPRISE_QUIET_HOURS_START=\"$apprise_quiet_start\"", $contents);
   $contents = preg_replace("/APPRISE_QUIET_HOURS_END=.*/", "APPRISE_QUIET_HOURS_END=\"$apprise_quiet_end\"", $contents);
+  $contents = preg_replace("/TEMPERATURE_UNIT=.*/", "TEMPERATURE_UNIT=$temperature_unit", $contents);
+  $contents = preg_replace("/WIND_SPEED_UNIT=.*/", "WIND_SPEED_UNIT=$wind_speed_unit", $contents);
+  $contents = preg_replace("/TIME_FORMAT=.*/", "TIME_FORMAT=$time_format", $contents);
+  $contents = preg_replace("/SIDEBAR_SITE_NAME=.*/", "SIDEBAR_SITE_NAME=$sidebar_site_name", $contents);
   $contents = preg_replace("/IMAGE_PROVIDER=.*/", "IMAGE_PROVIDER=$image_provider", $contents);
   $contents = preg_replace("/FLICKR_API_KEY=.*/", "FLICKR_API_KEY=$flickr_api_key", $contents);
   if(strlen($language) == 2 || strlen($language) == 5){
@@ -450,6 +466,39 @@ function runProcess() {
         </tr>
       </table>
       <p>Set your Latitude and Longitude to 4 decimal places. Get your coordinates <a href="https://latlong.net" target="_blank">here</a>.</p>
+      </td></tr></table><br>
+      <table class="settingstable"><tr><td>
+      <h2 id="settings-display">Display & Units</h2>
+      <table class="settingstable plaintable">
+        <tr>
+          <td><label for="temperature_unit">Temperature:</label></td>
+          <td><select name="temperature_unit">
+            <option value="fahrenheit" <?php if (get_temp_unit() !== 'C') echo 'selected'; ?>>Fahrenheit (&deg;F)</option>
+            <option value="celsius" <?php if (get_temp_unit() === 'C') echo 'selected'; ?>>Celsius (&deg;C)</option>
+          </select></td>
+        </tr>
+        <tr>
+          <td><label for="wind_speed_unit">Wind speed:</label></td>
+          <td><select name="wind_speed_unit">
+            <option value="mph" <?php if (get_wind_unit() === 'mph') echo 'selected'; ?>>Miles per hour (mph)</option>
+            <option value="kmh" <?php if (get_wind_unit() === 'kmh') echo 'selected'; ?>>Kilometers per hour (km/h)</option>
+            <option value="ms" <?php if (get_wind_unit() === 'ms') echo 'selected'; ?>>Meters per second (m/s)</option>
+          </select></td>
+        </tr>
+        <tr>
+          <td><label for="time_format">Time format:</label></td>
+          <td><select name="time_format">
+            <option value="12" <?php if (get_time_format() !== '24') echo 'selected'; ?>>12-hour (4:37 PM)</option>
+            <option value="24" <?php if (get_time_format() === '24') echo 'selected'; ?>>24-hour (16:37)</option>
+          </select></td>
+        </tr>
+      </table>
+      <p>Weather is always stored in one fixed unit, so you can switch these at any time without affecting your data.</p>
+      <input type="checkbox" name="sidebar_site_name" <?php if (isset($config['SIDEBAR_SITE_NAME']) && $config['SIDEBAR_SITE_NAME'] == 1) echo 'checked'; ?> >
+      <label for="sidebar_site_name">Show the Site Name under the logo in the sidebar (handy when you run more than one station)</label><br><br>
+      <label for="custom_info_html">Front-page info box:</label><br>
+      <textarea name="custom_info_html" rows="4" style="width:100%;" placeholder="Optional. Text or HTML shown in a box at the top of the Today page &mdash; local notes, a welcome message for visitors, anything. Leave empty for no box."><?php echo htmlspecialchars(get_custom_info_html()); ?></textarea>
+      <p>Shown to everyone who can reach this station's web page, exactly as entered (HTML is allowed and not sanitized &mdash; only paste markup you trust).</p>
       </td></tr></table><br>
       <table class="settingstable"><tr><td>
       <h2>BirdWeather</h2>

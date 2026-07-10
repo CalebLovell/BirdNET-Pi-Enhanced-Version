@@ -136,13 +136,30 @@ const TimelineView = {
     xhr.send();
   },
 
+  is24h: function () {
+    return window.BIRDNET_UNITS && window.BIRDNET_UNITS.time === '24';
+  },
+
   formatTimeAmPm: function (timeStr) {
     const [h, m] = timeStr.split(':');
     let hour = parseInt(h);
+    if (this.is24h()) {
+      return `${String(hour).padStart(2, '0')}:${m}`;
+    }
     const ampm = hour >= 12 ? 'PM' : 'AM';
     hour = hour % 12;
     if (hour === 0) hour = 12;
     return `${hour}:${m} ${ampm}`;
+  },
+
+  formatHourLabel: function (hour) {
+    if (this.is24h()) {
+      return `${String(hour).padStart(2, '0')}:00`;
+    }
+    const ampm = hour >= 12 ? 'PM' : 'AM';
+    let h = hour % 12;
+    if (h === 0) h = 12;
+    return `${h} ${ampm}`;
   },
 
   render: function () {
@@ -202,15 +219,15 @@ const TimelineView = {
       if (prevHour !== -1 && hBlock.hour > prevHour + 1) {
         html += checkSunMarker(prevHour + 1);
         const gap = hBlock.hour - prevHour - 1;
-        const startAmPm = this.formatTimeAmPm(`${prevHour + 1}:00:00`).split(':')[0] + ' ' + (prevHour + 1 >= 12 ? 'PM' : 'AM');
-        const endAmPm = this.formatTimeAmPm(`${hBlock.hour}:00:00`).split(':')[0] + ' ' + (hBlock.hour >= 12 ? 'PM' : 'AM');
+        const startAmPm = this.formatHourLabel(prevHour + 1);
+        const endAmPm = this.formatHourLabel(hBlock.hour);
         html += `<div class="tl-quiet-block">${gap} ${gap === 1 ? 'hour' : 'hours'} quiet (${startAmPm} - ${endAmPm})</div>`;
       }
 
       html += checkSunMarker(hBlock.hour);
 
       const isExpanded = (hBlock.hour === latestHour) ? 'expanded' : '';
-      const hourAmPm = this.formatTimeAmPm(`${hBlock.hour}:00:00`).split(':')[0] + ' ' + (hBlock.hour >= 12 ? 'PM' : 'AM');
+      const hourAmPm = this.formatHourLabel(hBlock.hour);
 
       html += `
         <div class="tl-hour-block ${isExpanded}" id="tl-hr-${hBlock.hour}">

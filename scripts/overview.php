@@ -46,7 +46,7 @@ function get_overview_weather($db, $date) {
 
   while ($row = db_fetch_assoc_safe($res)) {
     $weather[(int)$row['Hour']] = [
-      'temp' => round((float)$row['Temp']),
+      'temp' => display_temp($row['Temp']),
       'code' => (int)$row['ConditionCode'],
       'is_day' => $hasIsDay ? (int)$row['IsDay'] : 1
     ];

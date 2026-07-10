@@ -83,6 +83,14 @@ function nav_icon($name) {
         navigator.serviceWorker.register('/sw.js').catch(function () {});
       });
     }
+    // Display units, resolved server-side once; JS renders values the APIs
+    // have already converted and only needs the labels/format.
+    window.BIRDNET_UNITS = {
+      temp: '<?php echo get_temp_unit(); ?>',
+      tempSuffix: '<?php echo get_temp_unit() === 'C' ? '°C' : '°F'; ?>',
+      wind: '<?php echo h(wind_unit_label()); ?>',
+      time: '<?php echo get_time_format(); ?>'
+    };
   </script>
   <link rel="stylesheet" href="<?php echo $color_scheme . '?v=' . date('n.d.y', filemtime($color_scheme)); ?>">
   <link rel="stylesheet" href="static/css/tokens.css?v=<?php echo filemtime('static/css/tokens.css'); ?>">
@@ -137,6 +145,17 @@ function nav_icon($name) {
   <div class="sidebar-header">
     <div class="sidebar-logo">
       <img src="images/bnp.png" alt="BirdNET-Pi logo">
+      <?php
+      // Optional station label (Settings > Display & Units): tells stations
+      // apart at a glance when you run more than one.
+      $sidebar_config = get_config();
+      if (!empty($sidebar_config['SIDEBAR_SITE_NAME']) && $sidebar_config['SIDEBAR_SITE_NAME'] == 1) {
+        $sidebar_site_label = trim((string)($sidebar_config['SITE_NAME'] ?? ''));
+        if ($sidebar_site_label !== '') {
+          echo '<span class="sidebar-site-name">' . h($sidebar_site_label) . '</span>';
+        }
+      }
+      ?>
     </div>
     <button type="button" class="sidebar-toggle" onclick="myFunction()" aria-label="Toggle sidebar">«</button>
   </div>
@@ -246,7 +265,7 @@ foreach ($main_nav as $nav_item) {
               $w_stmt->bindValue(1, (int)date('G'), SQLITE3_INTEGER);
               $w_res = db_execute_safe($feed_db, $w_stmt, 'sidebar current weather');
               if ($w_row = db_fetch_assoc_safe($w_res)) {
-                  $temp = round((float)$w_row['Temp']);
+                  $temp = display_temp($w_row['Temp']) . str_replace('°', '&deg;', temp_unit_suffix());
                   $code = (int)$w_row['ConditionCode'];
                   $is_day = $hasIsDay ? (int)$w_row['IsDay'] : 1;
                   
@@ -260,7 +279,7 @@ foreach ($main_nav as $nav_item) {
                   elseif ($code >= 80 && $code <= 82) $emoji = $is_day === 0 ? '🌧️' : '🌦️';
                   elseif ($code >= 95) $emoji = '⛈️';
                   
-                  $current_weather_str = "<span id='liveFeedWeather' style='margin-left:auto; font-size:0.9em; font-weight:normal; color:var(--text-secondary, #6b7280);'>{$temp}&deg;F {$emoji}</span>";
+                  $current_weather_str = "<span id='liveFeedWeather' style='margin-left:auto; font-size:0.9em; font-weight:normal; color:var(--text-secondary, #6b7280);'>{$temp} {$emoji}</span>";
               }
           }
       }
@@ -298,7 +317,7 @@ foreach ($main_nav as $nav_item) {
         if (!data || data.status !== 'current') return;
         const weather = document.getElementById('liveFeedWeather');
         if (!weather) return;
-        weather.innerHTML = Math.round(Number(data.temp)) + '&deg;F ' + liveFeedWeatherEmoji(data.condition_code, data.is_day);
+        weather.innerHTML = Math.round(Number(data.temp)) + (window.BIRDNET_UNITS ? window.BIRDNET_UNITS.tempSuffix.replace('°', '&deg;') : '&deg;F') + ' ' + liveFeedWeatherEmoji(data.condition_code, data.is_day);
       })
       .catch(() => {
         // Keep the last known weather visible during transient API or database failures.

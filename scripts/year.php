@@ -39,7 +39,7 @@ while ($row = db_fetch_assoc_safe($m_res)) {
 $dawn_time = '';
 if ($dawn) {
   $mins = (int) $dawn['avg_minutes'];
-  $dawn_time = sprintf('%d:%02d AM', intdiv($mins, 60), $mins % 60);
+  $dawn_time = format_minutes_label($mins);
 }
 
 $site_name = get_sitename();

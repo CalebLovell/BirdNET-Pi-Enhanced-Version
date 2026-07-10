@@ -768,6 +768,107 @@ function get_visit_gap_seconds() {
   return (int)round($minutes * 60);
 }
 
+/* ===== Display units =====
+   Weather is always STORED in Fahrenheit / mph (weather.py fetches it that
+   way); only the display path converts. Storing raw values in one fixed unit
+   keeps a unit switch fully reversible and historical stats consistent. */
+
+function get_temp_unit() {
+  $config = get_config();
+  return (isset($config['TEMPERATURE_UNIT']) && strtolower($config['TEMPERATURE_UNIT']) === 'celsius') ? 'C' : 'F';
+}
+
+function temp_unit_suffix() {
+  return get_temp_unit() === 'C' ? '°C' : '°F';
+}
+
+function display_temp($fahrenheit, $decimals = 0) {
+  if ($fahrenheit === null || $fahrenheit === '') {
+    return null;
+  }
+  $value = (float)$fahrenheit;
+  if (get_temp_unit() === 'C') {
+    $value = ($value - 32) * 5 / 9;
+  }
+  return round($value, $decimals);
+}
+
+function get_wind_unit() {
+  $config = get_config();
+  $unit = isset($config['WIND_SPEED_UNIT']) ? strtolower($config['WIND_SPEED_UNIT']) : 'mph';
+  return in_array($unit, ['kmh', 'ms'], true) ? $unit : 'mph';
+}
+
+function wind_unit_label() {
+  $unit = get_wind_unit();
+  return $unit === 'kmh' ? 'km/h' : ($unit === 'ms' ? 'm/s' : 'mph');
+}
+
+function display_wind($mph, $decimals = 0) {
+  if ($mph === null || $mph === '') {
+    return null;
+  }
+  $value = (float)$mph;
+  $unit = get_wind_unit();
+  if ($unit === 'kmh') {
+    $value *= 1.609344;
+  } elseif ($unit === 'ms') {
+    $value *= 0.44704;
+  }
+  return round($value, $decimals);
+}
+
+function get_time_format() {
+  $config = get_config();
+  return (isset($config['TIME_FORMAT']) && trim($config['TIME_FORMAT']) === '24') ? '24' : '12';
+}
+
+/* Whole hour (0-23) as an axis/section label: "5 AM" or "05:00". */
+function format_hour_label($hour) {
+  $hour = ((int)$hour % 24 + 24) % 24;
+  if (get_time_format() === '24') {
+    return sprintf('%02d:00', $hour);
+  }
+  if ($hour === 0) return '12 AM';
+  if ($hour < 12) return $hour . ' AM';
+  if ($hour === 12) return '12 PM';
+  return ($hour - 12) . ' PM';
+}
+
+/* Minutes after midnight as a clock time: "4:37 AM" or "04:37". */
+function format_minutes_label($minutes) {
+  $minutes = max(0, (int)round($minutes));
+  $h = intdiv($minutes, 60) % 24;
+  $m = $minutes % 60;
+  if (get_time_format() === '24') {
+    return sprintf('%02d:%02d', $h, $m);
+  }
+  $ampm = $h < 12 ? 'AM' : 'PM';
+  $h12 = $h % 12 ?: 12;
+  return sprintf('%d:%02d %s', $h12, $m, $ampm);
+}
+
+/* "HH:MM[:SS]" (DB Time column) as a clock time in the configured format. */
+function format_time_label($time) {
+  $h = (int)substr($time, 0, 2);
+  $m = (int)substr($time, 3, 2);
+  return format_minutes_label($h * 60 + $m);
+}
+
+/* Owner-authored front-page info box (Settings > Display & Units). Lives in
+   its own file because multi-line HTML can't be a birdnet.conf value. */
+function custom_info_path() {
+  return __ROOT__ . '/custom_info.html';
+}
+
+function get_custom_info_html() {
+  $path = custom_info_path();
+  if (!is_file($path)) {
+    return '';
+  }
+  return trim((string)@file_get_contents($path));
+}
+
 /* $rows must be sorted by Date ASC, Time ASC and contain
    Date, Time, Sci_Name, Com_Name, Confidence, File_Name. */
 function visits_from_detections($rows, $gap_seconds = null) {

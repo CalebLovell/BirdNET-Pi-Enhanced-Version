@@ -248,18 +248,18 @@ if ($subview == 'dashboard') {
 
 if ($subview == 'behavior') {
     $dawn_chorus = [];
-    foreach(insights_query_all($db, "SELECT Com_Name, AVG(first_minutes) as avg_minutes, COUNT(*) as cnt FROM (SELECT Com_Name, Sci_Name, MIN(CAST(substr(Time, 1, 2) AS REAL) * 60 + CAST(substr(Time, 4, 2) AS REAL)) as first_minutes FROM detections WHERE CAST(substr(Time, 1, 2) AS INTEGER) BETWEEN 4 AND 10 GROUP BY Sci_Name, Date) GROUP BY Sci_Name HAVING COUNT(*) >= 3 ORDER BY avg_minutes ASC") as $row) { $hrs = intval($row['avg_minutes'] / 60); $mins = intval($row['avg_minutes']) % 60; $row['avg_time'] = sprintf('%d:%02d AM', $hrs, $mins); $dawn_chorus[] = $row; }
+    foreach(insights_query_all($db, "SELECT Com_Name, AVG(first_minutes) as avg_minutes, COUNT(*) as cnt FROM (SELECT Com_Name, Sci_Name, MIN(CAST(substr(Time, 1, 2) AS REAL) * 60 + CAST(substr(Time, 4, 2) AS REAL)) as first_minutes FROM detections WHERE CAST(substr(Time, 1, 2) AS INTEGER) BETWEEN 4 AND 10 GROUP BY Sci_Name, Date) GROUP BY Sci_Name HAVING COUNT(*) >= 3 ORDER BY avg_minutes ASC") as $row) { $row['avg_time'] = format_minutes_label($row['avg_minutes']); $dawn_chorus[] = $row; }
     $hourly_activity = array_fill(0, 24, 0);
     foreach(insights_query_all($db, "SELECT CAST(substr(Time, 1, 2) AS INTEGER) as hour, COUNT(*) as cnt FROM detections GROUP BY hour ORDER BY hour ASC") as $row) { $hourly_activity[$row['hour']] = $row['cnt']; }
-    $hourly_labels_json = json_encode(array_map(function($h) { if ($h == 0) return '12 AM'; if ($h < 12) return $h . ' AM'; if ($h == 12) return '12 PM'; return ($h - 12) . ' PM'; }, range(0, 23)));
+    $hourly_labels_json = json_encode(array_map('format_hour_label', range(0, 23)));
     $hourly_values_json = json_encode(array_values($hourly_activity));
     $peak_hour_idx = array_search(max($hourly_activity), $hourly_activity);
-    $peak_hour_label = ($peak_hour_idx == 0) ? '12 AM' : (($peak_hour_idx < 12) ? $peak_hour_idx . ' AM' : (($peak_hour_idx == 12) ? '12 PM' : ($peak_hour_idx - 12) . ' PM'));
+    $peak_hour_label = format_hour_label($peak_hour_idx);
     $peak_hour_count = max($hourly_activity);
     $nocturnal = [];
-    foreach(insights_query_all($db, "SELECT Com_Name, COUNT(*) as cnt, AVG(CAST(substr(Time, 1, 2) AS REAL) * 60 + CAST(substr(Time, 4, 2) AS REAL)) as avg_minutes FROM detections WHERE CAST(substr(Time, 1, 2) AS INTEGER) >= 22 OR CAST(substr(Time, 1, 2) AS INTEGER) < 4 GROUP BY Sci_Name HAVING COUNT(*) >= 2 ORDER BY cnt DESC") as $row) { $m = $row['avg_minutes']; $hrs = intval($m / 60); $mins = intval($m) % 60; if ($hrs >= 12) { $row['avg_time'] = sprintf('%d:%02d PM', $hrs == 12 ? 12 : $hrs - 12, $mins); } else { $row['avg_time'] = sprintf('%d:%02d AM', $hrs == 0 ? 12 : $hrs, $mins); } $nocturnal[] = $row; }
+    foreach(insights_query_all($db, "SELECT Com_Name, COUNT(*) as cnt, AVG(CAST(substr(Time, 1, 2) AS REAL) * 60 + CAST(substr(Time, 4, 2) AS REAL)) as avg_minutes FROM detections WHERE CAST(substr(Time, 1, 2) AS INTEGER) >= 22 OR CAST(substr(Time, 1, 2) AS INTEGER) < 4 GROUP BY Sci_Name HAVING COUNT(*) >= 2 ORDER BY cnt DESC") as $row) { $row['avg_time'] = format_minutes_label($row['avg_minutes']); $nocturnal[] = $row; }
     $activity_windows = [];
-    foreach(insights_query_all($db, "SELECT Com_Name, MIN(Time) as earliest, MAX(Time) as latest, COUNT(*) as cnt FROM detections GROUP BY Sci_Name HAVING COUNT(*) >= 5 ORDER BY cnt DESC") as $row) { $e_h = intval(substr($row['earliest'], 0, 2)); $e_m = substr($row['earliest'], 3, 2); $l_h = intval(substr($row['latest'], 0, 2)); $l_m = substr($row['latest'], 3, 2); $row['earliest_fmt'] = sprintf('%d:%s %s', $e_h % 12 ?: 12, $e_m, $e_h < 12 ? 'AM' : 'PM'); $row['latest_fmt'] = sprintf('%d:%s %s', $l_h % 12 ?: 12, $l_m, $l_h < 12 ? 'AM' : 'PM'); $activity_windows[] = $row; }
+    foreach(insights_query_all($db, "SELECT Com_Name, MIN(Time) as earliest, MAX(Time) as latest, COUNT(*) as cnt FROM detections GROUP BY Sci_Name HAVING COUNT(*) >= 5 ORDER BY cnt DESC") as $row) { $row['earliest_fmt'] = format_time_label($row['earliest']); $row['latest_fmt'] = format_time_label($row['latest']); $activity_windows[] = $row; }
 }
 
 if ($subview == 'migration') {
@@ -368,17 +368,26 @@ if ($subview == 'environmental') {
     $wmo_codes = [0 => 'Clear sky', 1 => 'Mostly clear', 2 => 'Partly cloudy', 3 => 'Overcast', 45 => 'Fog', 48 => 'Rime fog', 51 => 'Light drizzle', 53 => 'Moderate drizzle', 55 => 'Dense drizzle', 61 => 'Slight rain', 63 => 'Moderate rain', 65 => 'Heavy rain', 71 => 'Slight snow', 73 => 'Moderate snow', 75 => 'Heavy snow', 80 => 'Slight showers', 81 => 'Moderate showers', 82 => 'Violent showers', 95 => 'Thunderstorm', 96 => 'Thunderstorm + hail', 99 => 'Thunderstorm + heavy hail'];
     $has_weather = (db_query_single_safe($db, "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='weather'", 0, 'insights weather table exists') > 0) && (db_query_single_safe($db, "SELECT COUNT(*) FROM weather", 0, 'insights weather row count') > 0);
     if ($has_weather) {
-        $temp_res = db_query_safe($db, "SELECT CASE WHEN w.Temp IS NULL THEN 'Unknown' WHEN w.Temp < 32 THEN 'Below 32°F' WHEN w.Temp < 46 THEN '32–45°F' WHEN w.Temp < 56 THEN '46–55°F' WHEN w.Temp < 66 THEN '56–65°F' WHEN w.Temp < 76 THEN '66–75°F' WHEN w.Temp < 86 THEN '76–85°F' WHEN w.Temp < 96 THEN '86–95°F' ELSE 'Above 95°F' END as bracket, COUNT(*) as det_count, COUNT(DISTINCT d.Sci_Name) as species_count, ROUND(AVG(w.Temp), 1) as avg_temp FROM detections d INNER JOIN weather w ON d.Date = w.Date AND CAST(substr(d.Time, 1, 2) AS INTEGER) = w.Hour GROUP BY bracket", 'insights weather temperature brackets');
-        $master_brackets = [
-            'Below 32°F' => ['bracket' => 'Below 32°F', 'det_count' => 0, 'species_count' => 0],
-            '32–45°F' => ['bracket' => '32–45°F', 'det_count' => 0, 'species_count' => 0],
-            '46–55°F' => ['bracket' => '46–55°F', 'det_count' => 0, 'species_count' => 0],
-            '56–65°F' => ['bracket' => '56–65°F', 'det_count' => 0, 'species_count' => 0],
-            '66–75°F' => ['bracket' => '66–75°F', 'det_count' => 0, 'species_count' => 0],
-            '76–85°F' => ['bracket' => '76–85°F', 'det_count' => 0, 'species_count' => 0],
-            '86–95°F' => ['bracket' => '86–95°F', 'det_count' => 0, 'species_count' => 0],
-            'Above 95°F' => ['bracket' => 'Above 95°F', 'det_count' => 0, 'species_count' => 0]
-        ];
+        /* Bracket edges live in °F (how weather is stored), but in Celsius
+           mode the edges land on exact 5°C steps (32/41/.../86°F = 0/5/.../30°C)
+           so the bins are real Celsius bins, not relabeled Fahrenheit ones. */
+        if (get_temp_unit() === 'C') {
+            $bracket_edges = [32, 41, 50, 59, 68, 77, 86];
+            $bracket_labels = ['Below 0°C', '0–4°C', '5–9°C', '10–14°C', '15–19°C', '20–24°C', '25–29°C', 'Above 30°C'];
+        } else {
+            $bracket_edges = [32, 46, 56, 66, 76, 86, 96];
+            $bracket_labels = ['Below 32°F', '32–45°F', '46–55°F', '56–65°F', '66–75°F', '76–85°F', '86–95°F', 'Above 95°F'];
+        }
+        $bracket_case = "CASE WHEN w.Temp IS NULL THEN 'Unknown'";
+        foreach ($bracket_edges as $bi => $edge) {
+            $bracket_case .= " WHEN w.Temp < $edge THEN '" . $bracket_labels[$bi] . "'";
+        }
+        $bracket_case .= " ELSE '" . end($bracket_labels) . "' END";
+        $temp_res = db_query_safe($db, "SELECT $bracket_case as bracket, COUNT(*) as det_count, COUNT(DISTINCT d.Sci_Name) as species_count, ROUND(AVG(w.Temp), 1) as avg_temp FROM detections d INNER JOIN weather w ON d.Date = w.Date AND CAST(substr(d.Time, 1, 2) AS INTEGER) = w.Hour GROUP BY bracket", 'insights weather temperature brackets');
+        $master_brackets = [];
+        foreach ($bracket_labels as $bl) {
+            $master_brackets[$bl] = ['bracket' => $bl, 'det_count' => 0, 'species_count' => 0];
+        }
         while($row = db_fetch_assoc_safe($temp_res)) {
             if (isset($master_brackets[$row['bracket']])) {
                 $master_brackets[$row['bracket']] = $row;
@@ -422,25 +431,36 @@ if ($subview == 'environmental') {
         $condition_impact = $master_conditions;
 
         // --- Unified Wind Analytics (Speed + Direction) ---
+        // Thresholds are fixed in stored mph (5/15/25); only the labels show
+        // the configured unit's equivalents.
+        $wind_unit = get_wind_unit();
+        if ($wind_unit === 'kmh') {
+            $wind_labels = ['Calm (0-8)', 'Breezy (9-24)', 'Windy (25-40)', 'Very Windy (40+)'];
+        } elseif ($wind_unit === 'ms') {
+            $wind_labels = ['Calm (0-2)', 'Breezy (3-7)', 'Windy (8-11)', 'Very Windy (11+)'];
+        } else {
+            $wind_labels = ['Calm (0-5)', 'Breezy (6-15)', 'Windy (16-25)', 'Very Windy (26-35+)'];
+        }
+        $wind_case = "CASE
+                WHEN w.WindSpeed <= 5 THEN '" . $wind_labels[0] . "'
+                WHEN w.WindSpeed <= 15 THEN '" . $wind_labels[1] . "'
+                WHEN w.WindSpeed <= 25 THEN '" . $wind_labels[2] . "'
+                ELSE '" . $wind_labels[3] . "'
+            END";
         $unified_wind = [
-            'Calm (0-5)' => ['emoji' => '🍃', 'det_count' => 0, 'species_count' => 0, 'cardinals' => []],
-            'Breezy (6-15)' => ['emoji' => '🌬️', 'det_count' => 0, 'species_count' => 0, 'cardinals' => []],
-            'Windy (16-25)' => ['emoji' => '💨', 'det_count' => 0, 'species_count' => 0, 'cardinals' => []],
-            'Very Windy (26-35+)' => ['emoji' => '🌪️', 'det_count' => 0, 'species_count' => 0, 'cardinals' => []]
+            $wind_labels[0] => ['emoji' => '🍃', 'det_count' => 0, 'species_count' => 0, 'cardinals' => []],
+            $wind_labels[1] => ['emoji' => '🌬️', 'det_count' => 0, 'species_count' => 0, 'cardinals' => []],
+            $wind_labels[2] => ['emoji' => '💨', 'det_count' => 0, 'species_count' => 0, 'cardinals' => []],
+            $wind_labels[3] => ['emoji' => '🌪️', 'det_count' => 0, 'species_count' => 0, 'cardinals' => []]
         ];
 
         // 1. Bracket totals
         $wind_res = db_query_safe($db, "SELECT
-            CASE 
-                WHEN w.WindSpeed <= 5 THEN 'Calm (0-5)'
-                WHEN w.WindSpeed <= 15 THEN 'Breezy (6-15)'
-                WHEN w.WindSpeed <= 25 THEN 'Windy (16-25)'
-                ELSE 'Very Windy (26-35+)'
-            END as bracket,
-            COUNT(*) as det_count, 
-            COUNT(DISTINCT d.Sci_Name) as species_count 
-            FROM detections d 
-            INNER JOIN weather w ON d.Date = w.Date AND CAST(substr(d.Time, 1, 2) AS INTEGER) = w.Hour 
+            $wind_case as bracket,
+            COUNT(*) as det_count,
+            COUNT(DISTINCT d.Sci_Name) as species_count
+            FROM detections d
+            INNER JOIN weather w ON d.Date = w.Date AND CAST(substr(d.Time, 1, 2) AS INTEGER) = w.Hour
             WHERE w.WindSpeed IS NOT NULL
             GROUP BY bracket", 'insights weather wind speed');
 
@@ -456,12 +476,7 @@ if ($subview == 'environmental') {
 
         // 2. Cardinal breakdown per bracket
         $nest_res = db_query_safe($db, "SELECT
-            CASE 
-                WHEN w.WindSpeed <= 5 THEN 'Calm (0-5)'
-                WHEN w.WindSpeed <= 15 THEN 'Breezy (6-15)'
-                WHEN w.WindSpeed <= 25 THEN 'Windy (16-25)'
-                ELSE 'Very Windy (26-35+)'
-            END as bracket,
+            $wind_case as bracket,
             CASE 
                 WHEN w.WindDirection >= 337.5 OR w.WindDirection < 22.5 THEN 'N'
                 WHEN w.WindDirection < 67.5 THEN 'NE'
@@ -493,7 +508,12 @@ if ($subview == 'environmental') {
         }
         $wind_impact = $unified_wind;
         $ideal_res = db_query_safe($db, "SELECT d.Com_Name, ROUND(AVG(w.Temp), 1) as avg_temp, ROUND(MIN(w.Temp), 1) as min_temp, ROUND(MAX(w.Temp), 1) as max_temp, COUNT(*) as cnt FROM detections d INNER JOIN weather w ON d.Date = w.Date AND CAST(substr(d.Time, 1, 2) AS INTEGER) = w.Hour GROUP BY d.Sci_Name HAVING cnt >= 5 ORDER BY cnt DESC", 'insights species ideal temperature');
-        while($row = db_fetch_assoc_safe($ideal_res)) { $species_ideal[] = $row; }
+        while($row = db_fetch_assoc_safe($ideal_res)) {
+            $row['avg_temp'] = display_temp($row['avg_temp'], 1);
+            $row['min_temp'] = display_temp($row['min_temp'], 1);
+            $row['max_temp'] = display_temp($row['max_temp'], 1);
+            $species_ideal[] = $row;
+        }
         $trend_stmt = $db->prepare("
             SELECT d.Date,
                    COUNT(*) as det_count,
@@ -514,7 +534,7 @@ if ($subview == 'environmental') {
         $trend_res = db_execute_safe($db, $trend_stmt, 'insights weather trend');
         while($row = db_fetch_assoc_safe($trend_res)) { $temp_vs_detections[] = $row; }
         $temp_trend_labels = json_encode(array_map(function($r) { return date('M j', strtotime($r['Date'])); }, $temp_vs_detections));
-        $temp_trend_temps = json_encode(array_map(function($r) { return $r['avg_temp']; }, $temp_vs_detections));
+        $temp_trend_temps = json_encode(array_map(function($r) { return $r['avg_temp'] === null ? null : display_temp($r['avg_temp'], 1); }, $temp_vs_detections));
         $temp_trend_dets = json_encode(array_map(function($r) { return $r['det_count']; }, $temp_vs_detections));
     }
 }
@@ -1424,7 +1444,7 @@ $db->close();
                 <div class="insights-stats-item" style="display: flex; flex-direction: row; align-items: stretch; justify-content: space-between; gap: 0; padding: 16px 20px; margin-bottom: 8px;">
                     <!-- Speed & Species Mix -->
                     <div style="flex: 0 0 220px; padding-right: 25px; border-right: 1.5px solid var(--border); display: flex; flex-direction: column; justify-content: center;">
-                        <div class="insights-stats-name" style="font-size: 1.1em; margin-bottom: 2px; white-space: nowrap;"><?php echo $w['emoji']; ?> <?php echo $bracket; ?> mph</div>
+                        <div class="insights-stats-name" style="font-size: 1.1em; margin-bottom: 2px; white-space: nowrap;"><?php echo $w['emoji']; ?> <?php echo $bracket; ?> <?php echo wind_unit_label(); ?></div>
                         <div style="font-size: 0.8em; color: var(--text-muted); white-space: nowrap;">
                             <?php echo $w['det_count'] > 0 ? $w['species_count'] . ' species active' : 'No species recorded'; ?>
                         </div>
@@ -1474,9 +1494,9 @@ $db->close();
             <div class="insights-stats-item <?php echo $rank_temp > 10 ? 'hidden-item' : ''; ?>">
                 <div>
                     <div class="insights-stats-name" style="margin-bottom: 2px;"><?php echo $sp['Com_Name']; ?></div>
-                    <div style="font-size: 0.8em; color: var(--text-muted);">Range: <?php echo $sp['min_temp']; ?>°F – <?php echo $sp['max_temp']; ?>°F · <?php echo number_format($sp['cnt']); ?> detections</div>
+                    <div style="font-size: 0.8em; color: var(--text-muted);">Range: <?php echo $sp['min_temp'] . temp_unit_suffix(); ?> – <?php echo $sp['max_temp'] . temp_unit_suffix(); ?> · <?php echo number_format($sp['cnt']); ?> detections</div>
                 </div>
-                <span class="insights-stats-count">~<?php echo $sp['avg_temp']; ?>°F</span>
+                <span class="insights-stats-count">~<?php echo $sp['avg_temp'] . temp_unit_suffix(); ?></span>
             </div>
             <?php $rank_temp++; endforeach; ?>
             <?php endif; ?>
@@ -1866,7 +1886,7 @@ document.addEventListener('DOMContentLoaded', function() {
                     borderWidth: 1,
                     yAxisID: 'y-dets'
                 }, {
-                    label: 'Avg Temp (°F)',
+                    label: 'Avg Temp (<?php echo temp_unit_suffix(); ?>)',
                     type: 'line',
                     data: <?php echo $temp_trend_temps; ?>,
                     borderColor: '#f59e0b',
@@ -1883,7 +1903,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 scales: {
                     yAxes: [
                         { id: 'y-dets', position: 'left', ticks: { beginAtZero: true, fontColor: fontColor }, scaleLabel: { display: true, labelString: 'Detections', fontColor: fontColor } },
-                        { id: 'y-temp', position: 'right', ticks: { fontColor: '#f59e0b' }, scaleLabel: { display: true, labelString: 'Temp (°F)', fontColor: '#f59e0b' }, gridLines: { drawOnChartArea: false } }
+                        { id: 'y-temp', position: 'right', ticks: { fontColor: '#f59e0b' }, scaleLabel: { display: true, labelString: 'Temp (<?php echo temp_unit_suffix(); ?>)', fontColor: '#f59e0b' }, gridLines: { drawOnChartArea: false } }
                     ],
                     xAxes: [{ ticks: { fontColor: fontColor, maxRotation: 45, minRotation: 0 } }]
                 }

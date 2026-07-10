@@ -151,6 +151,14 @@ $visit_explainer = 'A visit groups repeated detections of the same bird. After '
   . ' quiet minute' . ($gap_minutes === 1 ? '' : 's') . ' without that species, the next detection starts a new visit.';
 ?>
 <div class="now-page">
+  <?php
+  // Owner-authored info box (Settings > Display & Units). Rendered as-is:
+  // only the authenticated station owner can set it.
+  $custom_info = get_custom_info_html();
+  if ($custom_info !== '') {
+    echo '<section class="custom-info-box" aria-label="Station notice">' . $custom_info . '</section>';
+  }
+  ?>
   <?php if ($show_setup) { ?>
   <section class="ui-card setup-checklist" aria-label="Setup checklist">
     <h3><?php echo nav_icon('sliders'); ?> Finish setting up your station
@@ -283,7 +291,7 @@ $visit_explainer = 'A visit groups repeated detections of the same bird. After '
       : esc(formatAgo(v.seconds_ago));
     var weather = '';
     if (data.weather && data.weather.status === 'current') {
-      weather = ' &middot; ' + Math.round(data.weather.temp) + '&deg;F ' + esc(data.weather.condition);
+      weather = ' &middot; ' + Math.round(data.weather.temp) + (window.BIRDNET_UNITS ? window.BIRDNET_UNITS.tempSuffix.replace('°', '&deg;') : '&deg;F') + ' ' + esc(data.weather.condition);
     }
     document.getElementById('heroMeta').innerHTML =
       when +
@@ -342,6 +350,9 @@ $visit_explainer = 'A visit groups repeated detections of the same bird. After '
   }
 
   function hourLabel(h) {
+    if (window.BIRDNET_UNITS && window.BIRDNET_UNITS.time === '24') {
+      return (h < 10 ? '0' : '') + h + 'h';
+    }
     if (h === 0) return '12a';
     if (h < 12) return h + 'a';
     if (h === 12) return '12p';

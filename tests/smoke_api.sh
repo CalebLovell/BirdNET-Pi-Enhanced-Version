@@ -111,6 +111,7 @@ check "protected view authenticated" 200 "/?view=Settings" -u "$AUTH"
 echo "== Read API =="
 check "system health" 200 "/api/v1/system/health"
 check "weather current" 200 "/api/v1/weather/current"
+check_contains "weather has display unit" '"temp_unit"'
 check "species list" 200 "/api/v1/species/list?limit=5"
 check "species list csv" 200 "/api/v1/species/list?limit=5&format=csv"
 check "species search" 200 "/api/v1/species/search?q=card"

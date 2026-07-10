@@ -332,6 +332,20 @@ if ! grep -E '^VISIT_GAP_MINUTES=' /etc/birdnet/birdnet.conf &>/dev/null;then
   echo "VISIT_GAP_MINUTES=5" >> /etc/birdnet/birdnet.conf
 fi
 
+# Display & units keys: same seeding requirement as above.
+if ! grep -E '^TEMPERATURE_UNIT=' /etc/birdnet/birdnet.conf &>/dev/null;then
+  echo "TEMPERATURE_UNIT=fahrenheit" >> /etc/birdnet/birdnet.conf
+fi
+if ! grep -E '^WIND_SPEED_UNIT=' /etc/birdnet/birdnet.conf &>/dev/null;then
+  echo "WIND_SPEED_UNIT=mph" >> /etc/birdnet/birdnet.conf
+fi
+if ! grep -E '^TIME_FORMAT=' /etc/birdnet/birdnet.conf &>/dev/null;then
+  echo "TIME_FORMAT=12" >> /etc/birdnet/birdnet.conf
+fi
+if ! grep -E '^SIDEBAR_SITE_NAME=' /etc/birdnet/birdnet.conf &>/dev/null;then
+  echo "SIDEBAR_SITE_NAME=0" >> /etc/birdnet/birdnet.conf
+fi
+
 # Data spine tables (Phase 1): reviews, species prefs, notes. Additive only -
 # the detections table is never altered. Keep in sync with createdb.sh and
 # spine_schema_statements() in scripts/common.php.

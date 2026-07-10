@@ -47,4 +47,6 @@ firstrun.ini
 HUMAN.txt
 include_species_list.txt
 whitelist_species_list.txt
+custom_info.html
 /nbproject/private/
+scripts/*.log

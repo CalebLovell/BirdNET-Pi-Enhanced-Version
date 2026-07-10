@@ -117,6 +117,16 @@ APPRISE_QUIET_HOURS_END=""
 ## Detections of a species within this many quiet minutes belong to one visit
 VISIT_GAP_MINUTES=5
 
+#----------------------  Display & Units ------------------------#
+## fahrenheit or celsius (weather is stored in Fahrenheit; display converts)
+TEMPERATURE_UNIT=fahrenheit
+## mph, kmh, or ms
+WIND_SPEED_UNIT=mph
+## 12 or 24 hour clock for displayed times
+TIME_FORMAT=12
+## Show the Site Name under the sidebar logo (1 shows, 0 hides)
+SIDEBAR_SITE_NAME=0
+
 #----------------------  Image Provider Configuration ------------------------#
 ## WIKIPEDIA or FLICKR (Flickr requires API key)
 IMAGE_PROVIDER=WIKIPEDIA
