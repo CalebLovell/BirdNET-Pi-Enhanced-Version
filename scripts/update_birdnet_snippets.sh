@@ -345,6 +345,9 @@ fi
 if ! grep -E '^SIDEBAR_SITE_NAME=' /etc/birdnet/birdnet.conf &>/dev/null;then
   echo "SIDEBAR_SITE_NAME=0" >> /etc/birdnet/birdnet.conf
 fi
+if ! grep -E '^NUMBER_FORMAT=' /etc/birdnet/birdnet.conf &>/dev/null;then
+  echo "NUMBER_FORMAT=point" >> /etc/birdnet/birdnet.conf
+fi
 
 # Data spine tables (Phase 1): reviews, species prefs, notes. Additive only -
 # the detections table is never altered. Keep in sync with createdb.sh and

@@ -44,25 +44,25 @@ if ($dawn) {
 
 $site_name = get_sitename();
 $stats = [
-  ['value' => number_format($total), 'label' => 'detections'],
-  ['value' => number_format($species_count), 'label' => 'species heard'],
-  ['value' => number_format($new_species), 'label' => 'new species'],
+  ['value' => format_number($total), 'label' => 'detections'],
+  ['value' => format_number($species_count), 'label' => 'species heard'],
+  ['value' => format_number($new_species), 'label' => 'new species'],
 ];
 $champions = [];
 if ($top) {
-  $champions[] = ['title' => 'Bird of the year', 'name' => $top['Com_Name'], 'detail' => number_format((int)$top['cnt']) . ' detections'];
+  $champions[] = ['title' => 'Bird of the year', 'name' => $top['Com_Name'], 'detail' => format_number((int)$top['cnt']) . ' detections'];
 }
 if ($rarest && (!$top || $rarest['Sci_Name'] !== $top['Sci_Name'])) {
-  $champions[] = ['title' => 'Rarest find', 'name' => $rarest['Com_Name'], 'detail' => 'only ' . number_format((int)$rarest['cnt']) . ' detection' . ((int)$rarest['cnt'] === 1 ? '' : 's')];
+  $champions[] = ['title' => 'Rarest find', 'name' => $rarest['Com_Name'], 'detail' => 'only ' . format_number((int)$rarest['cnt']) . ' detection' . ((int)$rarest['cnt'] === 1 ? '' : 's')];
 }
 if ($busiest) {
-  $champions[] = ['title' => 'Busiest day', 'name' => date('F j', strtotime($busiest['Date'])), 'detail' => number_format((int)$busiest['cnt']) . ' detections'];
+  $champions[] = ['title' => 'Busiest day', 'name' => date('F j', strtotime($busiest['Date'])), 'detail' => format_number((int)$busiest['cnt']) . ' detections'];
 }
 if ($dawn) {
   $champions[] = ['title' => 'Dawn chorus champion', 'name' => $dawn['Com_Name'], 'detail' => 'first song around ' . $dawn_time];
 }
 if ($night) {
-  $champions[] = ['title' => 'Night owl', 'name' => $night['Com_Name'], 'detail' => number_format((int)$night['cnt']) . ' detections after dark'];
+  $champions[] = ['title' => 'Night owl', 'name' => $night['Com_Name'], 'detail' => format_number((int)$night['cnt']) . ' detections after dark'];
 }
 ?>
 <div class="year-page">
@@ -102,7 +102,7 @@ if ($night) {
       $month_names = ['', 'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
       for ($m = 1; $m <= 12; $m++) { ?>
         <div class="year-month">
-          <div class="year-month-bar-wrap"><div class="year-month-bar" style="height: <?php echo max(2, round(($monthly[$m] / $max_month) * 100)); ?>%" title="<?php echo $month_names[$m] . ': ' . number_format($monthly[$m]); ?>"></div></div>
+          <div class="year-month-bar-wrap"><div class="year-month-bar" style="height: <?php echo max(2, round(($monthly[$m] / $max_month) * 100)); ?>%" title="<?php echo $month_names[$m] . ': ' . format_number($monthly[$m]); ?>"></div></div>
           <div class="year-month-label"><?php echo $month_names[$m]; ?></div>
         </div>
       <?php } ?>

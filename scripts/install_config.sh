@@ -124,6 +124,8 @@ TEMPERATURE_UNIT=fahrenheit
 WIND_SPEED_UNIT=mph
 ## 12 or 24 hour clock for displayed times
 TIME_FORMAT=12
+## Number display style: point (1,234.5), comma (1.234,5), or space (1 234,5)
+NUMBER_FORMAT=point
 ## Show the Site Name under the sidebar logo (1 shows, 0 hides)
 SIDEBAR_SITE_NAME=0
 

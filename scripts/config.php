@@ -126,6 +126,7 @@ if(isset($_GET["latitude"])){
   $temperature_unit = (isset($_GET['temperature_unit']) && $_GET['temperature_unit'] === 'celsius') ? 'celsius' : 'fahrenheit';
   $wind_speed_unit = (isset($_GET['wind_speed_unit']) && in_array($_GET['wind_speed_unit'], ['kmh', 'ms'], true)) ? $_GET['wind_speed_unit'] : 'mph';
   $time_format = (isset($_GET['time_format']) && $_GET['time_format'] === '24') ? '24' : '12';
+  $number_format_pref = (isset($_GET['number_format']) && in_array($_GET['number_format'], ['comma', 'space'], true)) ? $_GET['number_format'] : 'point';
   $sidebar_site_name = isset($_GET['sidebar_site_name']) ? 1 : 0;
   // Front-page info box: owner-authored HTML, stored in its own file (a
   // multi-line blob can't live in the bash-sourced birdnet.conf).
@@ -186,6 +187,7 @@ if(isset($_GET["latitude"])){
   $contents = preg_replace("/TEMPERATURE_UNIT=.*/", "TEMPERATURE_UNIT=$temperature_unit", $contents);
   $contents = preg_replace("/WIND_SPEED_UNIT=.*/", "WIND_SPEED_UNIT=$wind_speed_unit", $contents);
   $contents = preg_replace("/TIME_FORMAT=.*/", "TIME_FORMAT=$time_format", $contents);
+  $contents = preg_replace("/NUMBER_FORMAT=.*/", "NUMBER_FORMAT=$number_format_pref", $contents);
   $contents = preg_replace("/SIDEBAR_SITE_NAME=.*/", "SIDEBAR_SITE_NAME=$sidebar_site_name", $contents);
   $contents = preg_replace("/IMAGE_PROVIDER=.*/", "IMAGE_PROVIDER=$image_provider", $contents);
   $contents = preg_replace("/FLICKR_API_KEY=.*/", "FLICKR_API_KEY=$flickr_api_key", $contents);
@@ -490,6 +492,14 @@ function runProcess() {
           <td><select name="time_format">
             <option value="12" <?php if (get_time_format() !== '24') echo 'selected'; ?>>12-hour (4:37 PM)</option>
             <option value="24" <?php if (get_time_format() === '24') echo 'selected'; ?>>24-hour (16:37)</option>
+          </select></td>
+        </tr>
+        <tr>
+          <td><label for="number_format">Numbers:</label></td>
+          <td><select name="number_format">
+            <option value="point" <?php if (get_number_format() === 'point') echo 'selected'; ?>>1,234.5</option>
+            <option value="comma" <?php if (get_number_format() === 'comma') echo 'selected'; ?>>1.234,5</option>
+            <option value="space" <?php if (get_number_format() === 'space') echo 'selected'; ?>>1 234,5</option>
           </select></td>
         </tr>
       </table>

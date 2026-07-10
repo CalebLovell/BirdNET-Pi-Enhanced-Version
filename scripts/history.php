@@ -454,8 +454,8 @@ async function refreshEbirdPreview() {
     });
     var data = await response.json();
     var warning = data.warnings && data.warnings.length ? data.warnings.join(" ") : "";
-    var title = data.row_count ? data.row_count.toLocaleString() + " CSV rows ready" : "No eligible rows";
-    var detail = data.detection_count.toLocaleString() + " detections above 75% confidence on " + data.date + ".";
+    var title = data.row_count ? data.row_count.toLocaleString(window.BIRDNET_UNITS.numLocale) + " CSV rows ready" : "No eligible rows";
+    var detail = data.detection_count.toLocaleString(window.BIRDNET_UNITS.numLocale) + " detections above 75% confidence on " + data.date + ".";
     if (window.BirdNETUI) {
       preview.innerHTML = BirdNETUI.message(data.row_count ? (warning ? "warning" : "success") : "warning", title, warning || detail);
     } else {

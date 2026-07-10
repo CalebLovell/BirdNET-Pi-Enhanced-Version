@@ -841,6 +841,41 @@ function get_time_format() {
   return (isset($config['TIME_FORMAT']) && trim($config['TIME_FORMAT']) === '24') ? '24' : '12';
 }
 
+/* Number display style: 'point' 1,234.5 (default) / 'comma' 1.234,5 /
+   'space' 1 234,5. Display-only, like the units above - data paths (CSV
+   exports, JSON APIs) must keep machine format and never call these. */
+function get_number_format() {
+  $config = get_config();
+  $style = isset($config['NUMBER_FORMAT']) ? strtolower(trim($config['NUMBER_FORMAT'])) : 'point';
+  return in_array($style, ['comma', 'space'], true) ? $style : 'point';
+}
+
+function number_format_separators() {
+  switch (get_number_format()) {
+    case 'comma': return [',', '.'];
+    case 'space': return [',', "\u{00A0}"]; // no-break space so counts don't wrap
+    default:      return ['.', ','];
+  }
+}
+
+function format_number($n, $decimals = 0) {
+  if ($n === null || $n === '') {
+    return '';
+  }
+  list($dec, $thou) = number_format_separators();
+  return number_format((float)$n, $decimals, $dec, $thou);
+}
+
+/* BCP-47 locale whose number formatting matches the setting, for JS
+   toLocaleString on the client. */
+function number_format_js_locale() {
+  switch (get_number_format()) {
+    case 'comma': return 'de-DE';
+    case 'space': return 'fr-FR';
+    default:      return 'en-US';
+  }
+}
+
 /* Whole hour (0-23) as an axis/section label: "5 AM" or "05:00". */
 function format_hour_label($hour) {
   $hour = ((int)$hour % 24 + 24) % 24;

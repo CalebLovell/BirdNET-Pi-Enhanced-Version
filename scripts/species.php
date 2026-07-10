@@ -153,8 +153,8 @@ function render_species_cards($species_list, $image_provider, $fallback_provider
                     <a class="bird-name" href="?view=Bird&amp;sci_name=<?php echo rawurlencode($sci_name); ?>"><?php echo h($com_name); ?></a>
                     <span class="bird-sci"><?php echo h($sci_name); ?></span>
                     <table class="stats-table">
-                        <tr><td>Detections:</td><td><?php echo number_format($bird['Count']); ?></td></tr>
-                        <tr><td>Confidence:</td><td><?php echo round($bird['MaxConf'] * 100, 1); ?>%</td></tr>
+                        <tr><td>Detections:</td><td><?php echo format_number($bird['Count']); ?></td></tr>
+                        <tr><td>Confidence:</td><td><?php echo format_number($bird['MaxConf'] * 100, 1); ?>%</td></tr>
                         <tr><td>First:</td><td><?php echo date('n/j/Y', strtotime($bird['FirstDate'])); ?></td></tr>
                     </table>
                     <div class="species-card-links">
@@ -344,15 +344,15 @@ if ($is_species_ajax) {
                 <div class="kpi-icon">📋</div>
                 <div class="kpi-info">
                     <span class="kpi-label">Total Species</span>
-                    <span class="kpi-value"><?php echo number_format($kpi_res['unique_species']); ?></span>
-                    <span class="kpi-sub"><?php echo number_format($kpi_res['total_detections']); ?> detections</span>
+                    <span class="kpi-value"><?php echo format_number($kpi_res['unique_species']); ?></span>
+                    <span class="kpi-sub"><?php echo format_number($kpi_res['total_detections']); ?> detections</span>
                 </div>
             </div>
             <div class="kpi-card">
                 <div class="kpi-icon">🎯</div>
                 <div class="kpi-info">
                     <span class="kpi-label">Avg. Confidence</span>
-                    <span class="kpi-value"><?php echo round($kpi_res['avg_conf'] * 100, 1); ?>%</span>
+                    <span class="kpi-value"><?php echo format_number($kpi_res['avg_conf'] * 100, 1); ?>%</span>
                     <span class="kpi-sub">Overall average</span>
                 </div>
             </div>
@@ -389,7 +389,7 @@ if ($is_species_ajax) {
                 </div>
             </div>
             <div class="filter-footer">
-                <span class="results-count" id="species-results-count">Showing <?php echo min($species_total, $species_offset + count($species_list)); ?> of <?php echo number_format($species_total); ?> species</span>
+                <span class="results-count" id="species-results-count">Showing <?php echo min($species_total, $species_offset + count($species_list)); ?> of <?php echo format_number($species_total); ?> species</span>
                 <div class="filter-actions">
                     <a href="?view=Species" class="btn-reset">Reset</a>
                     <button type="submit" class="btn-apply text-white">Apply Filters</button>
@@ -450,7 +450,7 @@ if ($is_species_ajax) {
             .then(function(data) {
                 grid.insertAdjacentHTML('beforeend', data.html || '');
                 btn.dataset.nextOffset = data.next_offset;
-                if (countLabel) countLabel.textContent = 'Showing ' + data.next_offset.toLocaleString() + ' of ' + total.toLocaleString() + ' species';
+                if (countLabel) countLabel.textContent = 'Showing ' + data.next_offset.toLocaleString(window.BIRDNET_UNITS.numLocale) + ' of ' + total.toLocaleString(window.BIRDNET_UNITS.numLocale) + ' species';
                 if (!data.has_more) {
                     document.getElementById('species-load-more-wrap').hidden = true;
                 }

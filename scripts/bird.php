@@ -142,7 +142,7 @@ if ($bird_sci === '') {
 
   function renderStats(d) {
     var items = [
-      [d.total_detections.toLocaleString(), 'detections'],
+      [d.total_detections.toLocaleString(window.BIRDNET_UNITS.numLocale), 'detections'],
       [d.first_seen || '—', 'first heard'],
       [d.last_seen || '—', 'last heard'],
       [Math.round(d.best_confidence * 100) + '%', 'best confidence']

@@ -635,11 +635,11 @@ function loadAllData() {
     fetch(`api/v1/analytics/stats?days=${days}`)
         .then(r => r.json())
         .then(data => {
-            document.getElementById('kpi-total').textContent = data.total_detections.toLocaleString();
+            document.getElementById('kpi-total').textContent = data.total_detections.toLocaleString(window.BIRDNET_UNITS.numLocale);
             document.getElementById('kpi-unique').textContent = data.unique_species;
             document.getElementById('kpi-conf').textContent = data.avg_confidence;
             document.getElementById('kpi-common').textContent = data.most_common;
-            document.getElementById('kpi-common-sub').textContent = `${data.most_common_count.toLocaleString()} detections`;
+            document.getElementById('kpi-common-sub').textContent = `${data.most_common_count.toLocaleString(window.BIRDNET_UNITS.numLocale)} detections`;
         });
 
     // Top Species

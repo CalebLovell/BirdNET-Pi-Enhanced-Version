@@ -452,21 +452,21 @@ if(isset($_GET['ajax_left_chart']) && $_GET['ajax_left_chart'] == "true") {
     <div class="kpi-icon">
       <svg viewBox="0 0 24 24" width="28" height="28" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg>
     </div>
-    <div class="kpi-value"><?php echo number_format($chart_data['totalcount']);?></div>
+    <div class="kpi-value"><?php echo format_number($chart_data['totalcount']);?></div>
     <div class="kpi-label">Total Detections</div>
   </div>
   <div class="kpi-card">
     <div class="kpi-icon kpi-icon-today">
       <svg viewBox="0 0 24 24" width="28" height="28" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
     </div>
-    <div class="kpi-value"><form action="" method="GET" style="display:inline"><button type="submit" name="view" value="Todays Detections" class="kpi-link"><?php echo number_format($chart_data['todaycount']);?></button></form></div>
+    <div class="kpi-value"><form action="" method="GET" style="display:inline"><button type="submit" name="view" value="Todays Detections" class="kpi-link"><?php echo format_number($chart_data['todaycount']);?></button></form></div>
     <div class="kpi-label">Today</div>
   </div>
   <div class="kpi-card">
     <div class="kpi-icon kpi-icon-hour">
       <svg viewBox="0 0 24 24" width="28" height="28" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
     </div>
-    <div class="kpi-value"><?php echo number_format($chart_data['hourcount']);?></div>
+    <div class="kpi-value"><?php echo format_number($chart_data['hourcount']);?></div>
     <div class="kpi-label">Last Hour</div>
   </div>
   <div class="kpi-card">
@@ -512,9 +512,9 @@ if(isset($_GET['ajax_center_chart']) && $_GET['ajax_center_chart'] == "true") {
   $chart_data = $_SESSION['chart_data'];
 ?>
 <div class="kpi-cards kpi-cards-compact" style="justify-content: center; margin: 0; max-width: 100%;">
-  <div class="kpi-card kpi-card-sm"><div class="kpi-value"><?php echo number_format($chart_data['totalcount']);?></div><div class="kpi-label">Total</div></div>
-  <div class="kpi-card kpi-card-sm"><div class="kpi-value"><form action="" method="GET" style="display:inline"><button type="submit" name="view" value="Todays Detections" class="kpi-link"><?php echo number_format($chart_data['todaycount']);?></button></form></div><div class="kpi-label">Today</div></div>
-  <div class="kpi-card kpi-card-sm"><div class="kpi-value"><?php echo number_format($chart_data['hourcount']);?></div><div class="kpi-label">Last Hour</div></div>
+  <div class="kpi-card kpi-card-sm"><div class="kpi-value"><?php echo format_number($chart_data['totalcount']);?></div><div class="kpi-label">Total</div></div>
+  <div class="kpi-card kpi-card-sm"><div class="kpi-value"><form action="" method="GET" style="display:inline"><button type="submit" name="view" value="Todays Detections" class="kpi-link"><?php echo format_number($chart_data['todaycount']);?></button></form></div><div class="kpi-label">Today</div></div>
+  <div class="kpi-card kpi-card-sm"><div class="kpi-value"><?php echo format_number($chart_data['hourcount']);?></div><div class="kpi-label">Last Hour</div></div>
   <div class="kpi-card kpi-card-sm"><div class="kpi-value"><form action="" method="GET" style="display:inline"><button type="submit" name="view" value="Species Stats" class="kpi-link"><?php echo $chart_data['totalspeciestally'];?></button></form></div><div class="kpi-label">Species Total</div></div>
   <div class="kpi-card kpi-card-sm"><div class="kpi-value"><form action="" method="GET" style="display:inline"><input type="hidden" name="view" value="Recordings"><button type="submit" name="date" value="<?php echo date('Y-m-d');?>" class="kpi-link"><?php echo $chart_data['speciestally'];?></button></form></div><div class="kpi-label">Species Today</div></div>
   <div class="kpi-card kpi-card-sm"><div class="kpi-value"><button class="kpi-link" onclick="showNewSpeciesPopup(); return false;"><?php echo $chart_data['newspeciestally'];?></button></div><div class="kpi-label">New Today</div></div>

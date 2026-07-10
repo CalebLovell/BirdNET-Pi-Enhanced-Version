@@ -100,7 +100,7 @@ $tl_date = isset($_GET['date']) && preg_match('/^\d{4}-\d{2}-\d{2}$/', $_GET['da
 
   function render(data) {
     document.getElementById('tlStats').innerHTML = [
-      [data.total_detections.toLocaleString(), 'detections'],
+      [data.total_detections.toLocaleString(window.BIRDNET_UNITS.numLocale), 'detections'],
       [data.total_species, 'species'],
       [hourLabel(data.peak_hour), 'peak hour']
     ].map(function (it) {

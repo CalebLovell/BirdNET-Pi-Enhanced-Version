@@ -401,20 +401,20 @@ if (isset($_GET['ascii'])) {
 
     <div class="kpi-cards">
         <div class="kpi-card">
-            <span class="kpi-val"><?php echo number_format($total_detections); ?></span>
+            <span class="kpi-val"><?php echo format_number($total_detections); ?></span>
             <span class="kpi-label">Total Detections <?php echo get_trend_html($total_detections, $prior_total); ?> <span class="info-btn">i<span class="info-tooltip">Total number of bird sounds identified during this <?php echo $type; ?> period.</span></span></span>
         </div>
         <div class="kpi-card">
-            <span class="kpi-val"><?php echo number_format($daily_avg); ?></span>
+            <span class="kpi-val"><?php echo format_number($daily_avg); ?></span>
             <span class="kpi-label">Daily Average</span>
         </div>
         <div class="kpi-card">
-            <span class="kpi-val"><?php echo number_format($unique_species); ?></span>
+            <span class="kpi-val"><?php echo format_number($unique_species); ?></span>
             <span class="kpi-label">Unique Species <?php echo get_trend_html($unique_species, $prior_species); ?> <span class="info-btn">i<span class="info-tooltip">Number of different bird species identified in this period.</span></span></span>
         </div>
         <div class="kpi-card">
             <span class="kpi-val"><?php echo $busiest_day_name; ?></span>
-            <span class="kpi-label">Busiest Day (<?php echo number_format($busiest_day_count); ?>)</span>
+            <span class="kpi-label">Busiest Day (<?php echo format_number($busiest_day_count); ?>)</span>
         </div>
         <div class="kpi-card">
             <span class="kpi-val"><?php echo $peak_time; ?></span>
@@ -436,7 +436,7 @@ if (isset($_GET['ascii'])) {
                     echo '    <span class="species-sci">' . $d['sci'] . '</span>';
                     echo '  </div>';
                     echo '  <div class="count-box">';
-                    echo '    <span class="count-num">' . number_format($d['count']) . '</span>';
+                    echo '    <span class="count-num">' . format_number($d['count']) . '</span>';
                     echo '    ' . get_trend_html($d['count'], $d['prior_count']);
                     echo '  </div>';
                     echo '</li>';
@@ -469,7 +469,7 @@ if (isset($_GET['ascii'])) {
                         echo '    <span class="species-sci">' . $d['sci'] . '</span>';
                         echo '  </div>';
                         echo '  <div class="count-box">';
-                        echo '    <span class="count-num">' . number_format($d['count']) . '</span>';
+                        echo '    <span class="count-num">' . format_number($d['count']) . '</span>';
                         echo '  </div>';
                         echo '</li>';
                         $new_rank++;

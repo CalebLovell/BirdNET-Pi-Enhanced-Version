@@ -89,7 +89,16 @@ function nav_icon($name) {
       temp: '<?php echo get_temp_unit(); ?>',
       tempSuffix: '<?php echo get_temp_unit() === 'C' ? '°C' : '°F'; ?>',
       wind: '<?php echo h(wind_unit_label()); ?>',
-      time: '<?php echo get_time_format(); ?>'
+      time: '<?php echo get_time_format(); ?>',
+      numLocale: '<?php echo number_format_js_locale(); ?>'
+    };
+    // Number display style (Settings > Display & Units) for client-rendered
+    // values; toLocaleString with the matching locale mirrors format_number().
+    window.birdnetFormatNumber = function (n, decimals) {
+      if (n === null || n === undefined || n === '' || isNaN(Number(n))) return '';
+      var opts = decimals === undefined ? {} :
+        { minimumFractionDigits: decimals, maximumFractionDigits: decimals };
+      return Number(n).toLocaleString(window.BIRDNET_UNITS.numLocale, opts);
     };
   </script>
   <link rel="stylesheet" href="<?php echo $color_scheme . '?v=' . date('n.d.y', filemtime($color_scheme)); ?>">

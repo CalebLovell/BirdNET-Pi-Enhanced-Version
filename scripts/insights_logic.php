@@ -66,7 +66,7 @@ $tot_det_res = db_query_single_safe($db, 'SELECT COUNT(*) FROM detections', 0, '
 $total_detections = $tot_det_res ?: 0;
 $first_det = db_query_single_safe($db, 'SELECT MIN(Date) FROM detections', null, 'insights logic first detection');
 $milestones[] = ["title" => "First Detection", "val" => $first_det ?: 'N/A'];
-$milestones[] = ["title" => "Lifetime Detections", "val" => number_format($total_detections)];
+$milestones[] = ["title" => "Lifetime Detections", "val" => format_number($total_detections)];
 
 // Top Daily Record for a Single Species
 $top_spec_day = db_query_one_safe($db, 'SELECT Com_Name, Date, COUNT(*) as cnt FROM detections GROUP BY Sci_Name, Date ORDER BY cnt DESC LIMIT 1', 'insights logic top species day');

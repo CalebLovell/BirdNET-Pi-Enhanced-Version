@@ -115,7 +115,7 @@ function render_seasonal_species_item($s) {
                 <div style="flex: 1 1 220px;">
                     <div class="insights-stats-name" style="margin-bottom: 4px; font-size: 1.05em;"><?php echo h($s['Com_Name']); ?></div>
                     <div style="font-size: 0.85em; color: var(--text-muted);">
-                        <span style="display: inline-block; padding: 2px 8px; background: var(--bg-card); border-radius: 10px; border: 1px solid var(--border-light); margin-right: 8px;"><?php echo number_format($s['total']); ?> detections</span>
+                        <span style="display: inline-block; padding: 2px 8px; background: var(--bg-card); border-radius: 10px; border: 1px solid var(--border-light); margin-right: 8px;"><?php echo format_number($s['total']); ?> detections</span>
                         <span style="color: <?php echo h($status_color); ?>; font-weight: 700;"><?php echo h($s['status']); ?></span>
                     </div>
                 </div>
@@ -130,7 +130,7 @@ function render_seasonal_species_item($s) {
                                 $actual = isset($actual_segments[$i]) ? intval($actual_segments[$i]) : 0;
                                 $month_idx = floor($i / 4);
                                 $week_in_month = ($i % 4) + 1;
-                                $tooltip = $months_names[$month_idx] . " (Seg $week_in_month): " . ($actual > 0 ? $actual . " detections" : "Expected frequency: " . round($expected * 100, 1) . "%");
+                                $tooltip = $months_names[$month_idx] . " (Seg $week_in_month): " . ($actual > 0 ? $actual . " detections" : "Expected frequency: " . format_number($expected * 100, 1) . "%");
                             ?>
                             <div class="seasonal-bar-wrap" title="<?php echo h($tooltip); ?>">
                                 <div class="seasonal-bar-expected" style="height: <?php echo max(5, $expected * 30); ?>%;"></div>
@@ -218,7 +218,7 @@ if ($subview == 'dashboard') {
     $total_detections = db_query_single_safe($db, 'SELECT COUNT(*) FROM detections', 0, 'insights total detections') ?: 0;
     $first_det = db_query_single_safe($db, 'SELECT MIN(Date) FROM detections', null, 'insights first detection');
     $milestones[] = ["title" => "First Detection", "val" => $first_det ?: 'N/A'];
-    $milestones[] = ["title" => "Lifetime Detections", "val" => number_format($total_detections)];
+    $milestones[] = ["title" => "Lifetime Detections", "val" => format_number($total_detections)];
     if ($top_spec_day = db_query_one_safe($db, 'SELECT Com_Name, Date, COUNT(*) as cnt FROM detections GROUP BY Sci_Name, Date ORDER BY cnt DESC LIMIT 1', 'insights single day record')) {
         $milestones[] = ["title" => "Single Day Record", "val" => $top_spec_day['cnt'] . " " . $top_spec_day['Com_Name'] . " on " . date('M j, Y', strtotime($top_spec_day['Date']))];
     }
@@ -607,7 +607,7 @@ if ($subview == 'dashboard') {
         $takeaways[] = 'The health score is low right now (<strong>' . (int)$yard_health_score . '/100</strong>). Quiet days or low diversity usually explain it — see the recommendations below.';
     }
     if ((int)$best_day_count > 0) {
-        $takeaways[] = 'Busiest day ever: <strong>' . number_format((int)$best_day_count) . ' detections</strong> on ' . h($best_day_date) . '.';
+        $takeaways[] = 'Busiest day ever: <strong>' . format_number((int)$best_day_count) . ' detections</strong> on ' . h($best_day_date) . '.';
     }
     if ((int)$max_streak >= 7) {
         $takeaways[] = 'Longest unbroken run of daily detections: <strong>' . (int)$max_streak . ' days</strong>.';
@@ -632,7 +632,7 @@ if ($subview == 'dashboard') {
         $takeaways[] = '<strong>' . count($new_arrivals) . ' species arrived</strong> in the last two weeks after being absent — most recently ' . h($new_arrivals[0]['Com_Name']) . '.';
     }
     if (!empty($gone_quiet)) {
-        $takeaways[] = '<strong>' . h($gone_quiet[0]['Com_Name']) . '</strong> has gone quiet: last heard ' . (int)$gone_quiet[0]['days_ago'] . ' days ago after ' . number_format((int)$gone_quiet[0]['total_cnt']) . ' detections'
+        $takeaways[] = '<strong>' . h($gone_quiet[0]['Com_Name']) . '</strong> has gone quiet: last heard ' . (int)$gone_quiet[0]['days_ago'] . ' days ago after ' . format_number((int)$gone_quiet[0]['total_cnt']) . ' detections'
             . (count($gone_quiet) > 1 ? ' — ' . count($gone_quiet) . ' regulars are on this list' : '') . '.';
     }
     if (!empty($yoy_comparison)) {
@@ -654,7 +654,7 @@ if ($subview == 'dashboard') {
             }
         }
         if ($best_bracket) {
-            $takeaways[] = 'Your birds are most vocal in the <strong>' . h($best_bracket['bracket']) . '</strong> range (' . number_format((int)$best_bracket['det_count']) . ' detections recorded there).';
+            $takeaways[] = 'Your birds are most vocal in the <strong>' . h($best_bracket['bracket']) . '</strong> range (' . format_number((int)$best_bracket['det_count']) . ' detections recorded there).';
         }
         $best_cond_name = '';
         $best_cond_count = 0;
@@ -1041,11 +1041,11 @@ $db->close();
 
     <div class="insights-kpi-cards">
         <div class="insights-kpi-card">
-            <span class="insights-kpi-val"><?php echo number_format($lifetime_species); ?><span class="info-btn">i<span class="info-tooltip">The total count of unique bird species identified since station installation.</span></span></span>
+            <span class="insights-kpi-val"><?php echo format_number($lifetime_species); ?><span class="info-btn">i<span class="info-tooltip">The total count of unique bird species identified since station installation.</span></span></span>
             <span class="insights-kpi-label">Lifetime Species</span>
         </div>
         <div class="insights-kpi-card">
-            <span class="insights-kpi-val"><?php echo number_format($best_day_count); ?></span>
+            <span class="insights-kpi-val"><?php echo format_number($best_day_count); ?></span>
             <span class="insights-kpi-label">Best Day (<?php echo $best_day_date; ?>)</span>
         </div>
         <div class="insights-kpi-card">
@@ -1053,7 +1053,7 @@ $db->close();
             <span class="insights-kpi-label">Longest Streak</span>
         </div>
         <div class="insights-kpi-card">
-            <span class="insights-kpi-val"><?php echo number_format($rare_total); ?><span class="info-btn">i<span class="info-tooltip">Species with fewer than 5 total detections at your station since installation.</span></span></span>
+            <span class="insights-kpi-val"><?php echo format_number($rare_total); ?><span class="info-btn">i<span class="info-tooltip">Species with fewer than 5 total detections at your station since installation.</span></span></span>
             <span class="insights-kpi-label">Rare Species</span>
         </div>
     </div>
@@ -1111,7 +1111,7 @@ $db->close();
 
     <!-- Hourly Activity Chart -->
     <section class="insights-section" style="margin-bottom: 30px;">
-        <div class="insights-section-title">📊 Hourly Activity Distribution <span style="margin-left: auto; font-weight: normal; font-size: 0.85em; color: var(--text-muted);">Peak: <?php echo $peak_hour_label; ?> (<?php echo number_format($peak_hour_count); ?> detections)</span></div>
+        <div class="insights-section-title">📊 Hourly Activity Distribution <span style="margin-left: auto; font-weight: normal; font-size: 0.85em; color: var(--text-muted);">Peak: <?php echo $peak_hour_label; ?> (<?php echo format_number($peak_hour_count); ?> detections)</span></div>
         <div style="padding: 20px;">
             <canvas id="hourlyActivityChart" height="100"></canvas>
         </div>
@@ -1200,7 +1200,7 @@ $db->close();
             <div class="insights-stats-item <?php echo $rank_aw > 10 ? 'hidden-item' : ''; ?>">
                 <div>
                     <div class="insights-stats-name" style="margin-bottom: 2px;"><?php echo $w['Com_Name']; ?></div>
-                    <div style="font-size: 0.8em; color: var(--text-muted);"><?php echo number_format($w['cnt']); ?> total detections</div>
+                    <div style="font-size: 0.8em; color: var(--text-muted);"><?php echo format_number($w['cnt']); ?> total detections</div>
                 </div>
                 <span class="insights-stats-count" style="font-size: 0.9em;"><?php echo $w['earliest_fmt']; ?> → <?php echo $w['latest_fmt']; ?></span>
             </div>
@@ -1241,7 +1241,7 @@ $db->close();
                         <div class="insights-stats-name" style="margin-bottom: 2px;"><?php echo h($a['Com_Name']); ?></div>
                         <div style="font-size: 0.8em; color: var(--text-muted);">First seen: <?php echo date('M j', strtotime($a['first_seen'])); ?></div>
                     </div>
-                    <span class="insights-stats-count" style="color: #10b981;"><?php echo number_format($a['cnt']); ?> detections</span>
+                    <span class="insights-stats-count" style="color: #10b981;"><?php echo format_number($a['cnt']); ?> detections</span>
                 </div>
                 <?php $rank_na++; endforeach; ?>
                 <?php endif; ?>
@@ -1271,7 +1271,7 @@ $db->close();
                 <div class="insights-stats-item <?php echo $rank_gq > 10 ? 'hidden-item' : ''; ?>">
                     <div>
                         <div class="insights-stats-name" style="margin-bottom: 2px;"><?php echo h($q['Com_Name']); ?></div>
-                        <div style="font-size: 0.8em; color: var(--text-muted);"><?php echo number_format($q['total_cnt']); ?> total · Last: <?php echo date('M j', strtotime($q['last_seen'])); ?></div>
+                        <div style="font-size: 0.8em; color: var(--text-muted);"><?php echo format_number($q['total_cnt']); ?> total · Last: <?php echo date('M j', strtotime($q['last_seen'])); ?></div>
                     </div>
                     <span class="insights-stats-count" style="color: #ef4444;"><?php echo $q['days_ago']; ?>d ago</span>
                 </div>
@@ -1356,7 +1356,7 @@ $db->close();
                 data-offset="<?php echo $seasonal_loaded_count; ?>"
                 data-limit="<?php echo $seasonal_batch_size; ?>"
                 data-total="<?php echo $seasonal_total_species; ?>">
-            Load <?php echo number_format(min($seasonal_batch_size, $seasonal_total_species - $seasonal_loaded_count)); ?> more species ↓
+            Load <?php echo format_number(min($seasonal_batch_size, $seasonal_total_species - $seasonal_loaded_count)); ?> more species ↓
         </button>
         <?php endif; ?>
     </section>
@@ -1404,7 +1404,7 @@ $db->close();
                             <?php echo $t['det_count'] > 0 ? $t['species_count'] . ' species active' : 'No species recorded'; ?>
                         </div>
                     </div>
-                    <span class="insights-stats-count"><?php echo $t['det_count'] > 0 ? number_format($t['det_count']) : 'N/A'; ?></span>
+                    <span class="insights-stats-count"><?php echo $t['det_count'] > 0 ? format_number($t['det_count']) : 'N/A'; ?></span>
                 </div>
                 <?php endforeach; ?>
                 <?php endif; ?>
@@ -1429,7 +1429,7 @@ $db->close();
                             <?php echo $c['det_count'] > 0 ? $c['species_count'] . ' species active' : 'No species recorded'; ?>
                         </div>
                     </div>
-                    <span class="insights-stats-count"><?php echo $c['det_count'] > 0 ? number_format($c['det_count']) : 'N/A'; ?></span>
+                    <span class="insights-stats-count"><?php echo $c['det_count'] > 0 ? format_number($c['det_count']) : 'N/A'; ?></span>
                 </div>
                 <?php endforeach; ?>
                 <?php endif; ?>
@@ -1460,7 +1460,7 @@ $db->close();
                                     <?php echo $dir['emoji']; ?> <?php echo $dir['label']; ?>
                                 </div>
                                 <div style="color: var(--accent); font-weight: 800; font-size: 0.95em;">
-                                    <?php echo number_format($dir['count']); ?>
+                                    <?php echo format_number($dir['count']); ?>
                                 </div>
                             </div>
                             <?php endforeach; ?>
@@ -1472,7 +1472,7 @@ $db->close();
 
                     <!-- Total Detections (Right) -->
                     <div style="flex: 0 0 120px; text-align: right; padding-left: 25px; display: flex; align-items: center; justify-content: flex-end;">
-                        <span class="insights-stats-count" style="font-size: 1.5em;"><?php echo $w['det_count'] > 0 ? number_format($w['det_count']) : 'N/A'; ?></span>
+                        <span class="insights-stats-count" style="font-size: 1.5em;"><?php echo $w['det_count'] > 0 ? format_number($w['det_count']) : 'N/A'; ?></span>
                     </div>
                 </div>
                 <?php endforeach; ?>
@@ -1494,9 +1494,9 @@ $db->close();
             <div class="insights-stats-item <?php echo $rank_temp > 10 ? 'hidden-item' : ''; ?>">
                 <div>
                     <div class="insights-stats-name" style="margin-bottom: 2px;"><?php echo $sp['Com_Name']; ?></div>
-                    <div style="font-size: 0.8em; color: var(--text-muted);">Range: <?php echo $sp['min_temp'] . temp_unit_suffix(); ?> – <?php echo $sp['max_temp'] . temp_unit_suffix(); ?> · <?php echo number_format($sp['cnt']); ?> detections</div>
+                    <div style="font-size: 0.8em; color: var(--text-muted);">Range: <?php echo format_number($sp['min_temp'], 1) . temp_unit_suffix(); ?> – <?php echo format_number($sp['max_temp'], 1) . temp_unit_suffix(); ?> · <?php echo format_number($sp['cnt']); ?> detections</div>
                 </div>
-                <span class="insights-stats-count">~<?php echo $sp['avg_temp'] . temp_unit_suffix(); ?></span>
+                <span class="insights-stats-count">~<?php echo format_number($sp['avg_temp'], 1) . temp_unit_suffix(); ?></span>
             </div>
             <?php $rank_temp++; endforeach; ?>
             <?php endif; ?>
@@ -1526,15 +1526,15 @@ $db->close();
             <span class="insights-kpi-label">Avg Confidence</span>
         </div>
         <div class="insights-kpi-card">
-            <span class="insights-kpi-val" style="color: #10b981;"><?php echo number_format($high_conf_count); ?></span>
+            <span class="insights-kpi-val" style="color: #10b981;"><?php echo format_number($high_conf_count); ?></span>
             <span class="insights-kpi-label">High (≥80%)</span>
         </div>
         <div class="insights-kpi-card">
-            <span class="insights-kpi-val" style="color: #f59e0b;"><?php echo number_format($med_conf_count); ?></span>
+            <span class="insights-kpi-val" style="color: #f59e0b;"><?php echo format_number($med_conf_count); ?></span>
             <span class="insights-kpi-label">Medium (50-79%)</span>
         </div>
         <div class="insights-kpi-card">
-            <span class="insights-kpi-val" style="color: #ef4444;"><?php echo number_format($low_conf_count); ?></span>
+            <span class="insights-kpi-val" style="color: #ef4444;"><?php echo format_number($low_conf_count); ?></span>
             <span class="insights-kpi-label">Low (<50%)</span>
         </div>
     </div>
@@ -1711,7 +1711,7 @@ $db->close();
                 <div class="insights-stats-item <?php echo $rank_pw > 10 ? 'hidden-item' : ''; ?>">
                     <div>
                         <div class="insights-stats-name"><?php echo $s['Com_Name']; ?></div>
-                        <div style="font-size: 0.8em; color: var(--text-muted);">Week <?php echo $s['peak_week']; ?> Detections: <?php echo number_format($s['peak_count']); ?></div>
+                        <div style="font-size: 0.8em; color: var(--text-muted);">Week <?php echo $s['peak_week']; ?> Detections: <?php echo format_number($s['peak_count']); ?></div>
                     </div>
                     <?php
                         $is_peak = ($s['peak_week'] == $current_week);
@@ -1807,7 +1807,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 btn.remove();
             } else {
                 btn.disabled = false;
-                btn.textContent = 'Load ' + Math.min(limit, remaining).toLocaleString() + ' more species ↓';
+                btn.textContent = 'Load ' + Math.min(limit, remaining).toLocaleString(window.BIRDNET_UNITS.numLocale) + ' more species ↓';
             }
         } catch (err) {
             console.error(err);
@@ -1854,7 +1854,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 tooltips: {
                     callbacks: {
                         label: function(tooltipItem) {
-                            return tooltipItem.yLabel.toLocaleString() + ' detections';
+                            return tooltipItem.yLabel.toLocaleString(window.BIRDNET_UNITS.numLocale) + ' detections';
                         }
                     }
                 }
