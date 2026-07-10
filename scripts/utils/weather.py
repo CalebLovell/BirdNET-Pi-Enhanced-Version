@@ -2,6 +2,7 @@ import sqlite3
 import requests
 import os
 import logging
+import time
 from datetime import datetime
 import sys
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
@@ -10,24 +11,44 @@ from helpers import DB_PATH, get_settings
 logging.basicConfig(level=logging.INFO)
 log = logging.getLogger('weather')
 
+# Open-Meteo occasionally times out or returns 5xx; without retries a failed
+# hourly cron run left a permanent gap in the weather table. Retry a few
+# times, and fetch a week of history (the API serves it freely) so any
+# successful run backfills gaps from Pi downtime or earlier failed runs.
+FETCH_ATTEMPTS = 3
+RETRY_DELAY_SECONDS = [30, 60]
+PAST_DAYS = 7
+
+def fetch_hourly(lat, lon):
+    url = (f"https://api.open-meteo.com/v1/forecast?latitude={lat}&longitude={lon}"
+           "&hourly=temperature_2m,weather_code,is_day,wind_speed_10m,wind_direction_10m"
+           f"&temperature_unit=fahrenheit&wind_speed_unit=mph&past_days={PAST_DAYS}"
+           "&forecast_days=1&timezone=auto")
+    for attempt in range(1, FETCH_ATTEMPTS + 1):
+        try:
+            response = requests.get(url, timeout=15)
+            response.raise_for_status()
+            return response.json()
+        except Exception as e:
+            if attempt < FETCH_ATTEMPTS:
+                delay = RETRY_DELAY_SECONDS[min(attempt, len(RETRY_DELAY_SECONDS)) - 1]
+                log.warning(f"Weather fetch attempt {attempt}/{FETCH_ATTEMPTS} failed ({e}); retrying in {delay}s.")
+                time.sleep(delay)
+            else:
+                log.error(f"Weather fetch failed after {FETCH_ATTEMPTS} attempts: {e}")
+    return None
+
 def update_weather():
     conf = get_settings()
     lat = conf.get('LATITUDE', None)
     lon = conf.get('LONGITUDE', None)
-    
+
     if lat is None or lon is None or lat == '' or lon == '':
         log.error("Latitude or Longitude not set. Cannot fetch weather.")
         return
 
-    # Use Open-Meteo to fetch the past day and current forecast day
-    url = f"https://api.open-meteo.com/v1/forecast?latitude={lat}&longitude={lon}&hourly=temperature_2m,weather_code,is_day,wind_speed_10m,wind_direction_10m&temperature_unit=fahrenheit&wind_speed_unit=mph&past_days=1&forecast_days=1&timezone=auto"
-    
-    try:
-        response = requests.get(url, timeout=15)
-        response.raise_for_status()
-        data = response.json()
-    except Exception as e:
-        log.error(f"Failed to fetch weather: {e}")
+    data = fetch_hourly(lat, lon)
+    if data is None:
         return
 
     # Parse data
