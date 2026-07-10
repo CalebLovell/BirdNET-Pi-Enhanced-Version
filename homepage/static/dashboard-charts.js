@@ -30,7 +30,11 @@
                     var data = JSON.parse(xhr.responseText);
                     callback(data);
                 } catch (e) {
-                    console.warn('Dashboard charts: could not parse JSON', e);
+                    // Log what actually came back - the raw body is the only
+                    // way to diagnose a corrupted response after the fact.
+                    console.warn('Dashboard charts: could not parse JSON (attempt ' + attempt + ', ' +
+                        xhr.responseText.length + ' bytes). Body starts with: ' +
+                        JSON.stringify(xhr.responseText.slice(0, 300)), e);
                     retryOrFail('The station could not send heatmap data. It usually recovers on its own — try again in a moment.');
                 }
             } else {

@@ -125,6 +125,10 @@ if(isset($_GET['fetch_chart_string']) && $_GET['fetch_chart_string'] == "true") 
 
 if(isset($_GET['ajax_chart_data']) && $_GET['ajax_chart_data'] == "true") {
   header('Content-Type: application/json');
+  header('Cache-Control: no-store');
+  // Anything echoed before the JSON (stray whitespace from an include, a
+  // displayed PHP message) corrupts the payload; buffer and discard it.
+  ob_start();
 
   // Species aggregate: name, count, max confidence.
   // Detections reviewed as false positives (or hidden) are excluded.
@@ -202,7 +206,17 @@ if(isset($_GET['ajax_chart_data']) && $_GET['ajax_chart_data'] == "true") {
       $weather = get_overview_weather($db, $today);
   }
 
-  echo json_encode(['species' => $species, 'hourly' => $hourly, 'weather' => $weather, 'currentHour' => $currentHour]);
+  $chart_json = json_encode(['species' => $species, 'hourly' => $hourly, 'weather' => $weather, 'currentHour' => $currentHour], JSON_INVALID_UTF8_SUBSTITUTE);
+  if (ob_get_length()) {
+    error_log('overview ajax_chart_data: discarded stray output: ' . substr(ob_get_contents(), 0, 200));
+    ob_clean();
+  }
+  if ($chart_json === false) {
+    http_response_code(500);
+    echo json_encode(['error' => 'Encoding failed: ' . json_last_error_msg()]);
+    die();
+  }
+  echo $chart_json;
   die();
 }
 
@@ -258,7 +272,7 @@ if(isset($_GET['ajax_new_species_details']) && $_GET['ajax_new_species_details']
       'image' => $img_url
     ];
   }
-  echo json_encode($details);
+  echo json_encode($details, JSON_INVALID_UTF8_SUBSTITUTE);
   die();
 }
 
