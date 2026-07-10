@@ -276,6 +276,11 @@
             var hour = Math.floor((x - labelWidth) / cellWidth);
             var row = Math.floor((y - headerHeight) / cellHeight);
 
+            // The species label column (thumbnail + name) links to the Bird
+            // page, mirroring the Timeline lanes; signal it with the cursor.
+            var overSpeciesLabel = row >= 0 && row < species.length && x > 5 && x < labelWidth && !!species[row].sciName;
+            canvas.style.cursor = overSpeciesLabel ? 'pointer' : 'default';
+
             // Thumbnail check (x: 10 to 34)
             if (row >= 0 && row < species.length && x > 5 && x < 40) {
                 var s = species[row];
@@ -317,7 +322,7 @@
                         95: 'Thunderstorm', 96: 'Thunderstorm with Hail', 99: 'Thunderstorm with Heavy Hail'
                     };
                     var cond = codes[w.code] || 'Cloudy';
-                    weatherStr = '<br><span style="color:#aaa;font-size:10px;">' + w.temp + '°F • ' + cond + '</span>';
+                    weatherStr = '<br><span style="color:#aaa;font-size:10px;">' + w.temp + ((window.BIRDNET_UNITS && window.BIRDNET_UNITS.tempSuffix) || '°F') + ' • ' + cond + '</span>';
                 }
                 tooltip.innerHTML = '<strong>' + name + '</strong><br>' + hour + ':00 — ' + val + ' detection' + (val !== 1 ? 's' : '') + weatherStr;
                 tooltip.style.display = 'block';
@@ -342,6 +347,22 @@
         canvas.addEventListener('mouseleave', function () {
             tooltip.style.display = 'none';
             imgPreview.style.display = 'none';
+            canvas.style.cursor = 'default';
+        });
+
+        canvas.addEventListener('click', function (e) {
+            if (!lastData) return;
+            var species = lastData.species;
+            var rect = canvas.getBoundingClientRect();
+            var x = e.clientX - rect.left;
+            var y = e.clientY - rect.top;
+            var labelWidth = Math.min(220, rect.width * 0.35);
+            var hasWeather = lastData.weather && Object.keys(lastData.weather).length > 0;
+            var headerHeight = hasWeather ? 48 : 30;
+            var row = Math.floor((y - headerHeight) / 32);
+            if (row >= 0 && row < species.length && x > 5 && x < labelWidth && species[row].sciName) {
+                window.location = '?view=Bird&sci_name=' + encodeURIComponent(species[row].sciName);
+            }
         });
     }
 
