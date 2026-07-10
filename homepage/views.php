@@ -106,7 +106,7 @@ function nav_icon($name) {
   <link rel="stylesheet" href="static/css/shell.css?v=<?php echo filemtime('static/css/shell.css'); ?>">
   <link rel="stylesheet" href="static/css/pages.css?v=<?php echo filemtime('static/css/pages.css'); ?>">
   <link rel="stylesheet" type="text/css" href="static/dialog-polyfill.css">
-  <script src="static/ui-helpers.js?v=<?php echo date('n.d.y', filemtime('static/ui-helpers.js')); ?>" defer></script>
+  <script src="static/ui-helpers.js?v=<?php echo (int)@filemtime('static/ui-helpers.js'); ?>" defer></script>
   <script src="static/palette.js?v=<?php echo filemtime('static/palette.js'); ?>" defer></script>
   <?php if (isset($_SESSION['behind']) && intval($_SESSION['behind']) >= 99) { ?>
   <style>

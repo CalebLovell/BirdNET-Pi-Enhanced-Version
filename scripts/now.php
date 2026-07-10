@@ -224,7 +224,7 @@ $visit_explainer = 'A visit groups repeated detections of the same bird. After '
   </section>
 </div>
 
-<script src="static/dashboard-charts.js?v=<?php echo date('n.d.y', @filemtime('static/dashboard-charts.js')); ?>"></script>
+<script src="static/dashboard-charts.js?v=<?php echo (int)@filemtime('static/dashboard-charts.js'); ?>"></script>
 <script>
 (function () {
   'use strict';

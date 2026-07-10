@@ -491,7 +491,7 @@ if (get_included_files()[0] === __FILE__) {
     <div style="padding-bottom:10px;" id="timeline_container"></div>
 
 </div>
-<script src="static/timeline-view.js?v=1"></script>
+<script src="static/timeline-view.js?v=<?php echo (int)@filemtime('static/timeline-view.js'); ?>"></script>
 <?php if($kiosk == true) { ?>
   <script>
     const scrollToTop = () => {

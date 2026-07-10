@@ -3,7 +3,10 @@
    cache-busting query strings), network-only for everything else - pages and
    the API must always be live, and the audio stream must never be touched. */
 
-var CACHE_NAME = 'birdnet-static-v1';
+/* Bump the suffix whenever cached-asset behavior must reset on every
+   client: activate deletes all older caches. v2: purges entries cached
+   under day-granular ?v= stamps that let stale JS survive deploys. */
+var CACHE_NAME = 'birdnet-static-v2';
 var STATIC_PATTERN = /^\/(static|images)\//;
 
 self.addEventListener('install', function (event) {
