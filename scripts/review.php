@@ -159,7 +159,10 @@ require_once 'scripts/common.php';
         box.innerHTML = '';
         return;
       }
-      var label = examples[0].source === 'confirmed' ? 'Compare with clips you confirmed:' : 'Compare with this station’s strongest matches:';
+      var confirmedCount = examples.filter(function (ex) { return ex.source === 'confirmed'; }).length;
+      var label = confirmedCount === examples.length ? 'Compare with clips you confirmed:'
+        : (confirmedCount === 0 ? 'Compare with this station’s strongest matches:'
+          : 'Compare with known-good clips (&#10003; = you confirmed):');
       box.innerHTML = '<div class="review-examples-label">' + label + '</div>' +
         '<div class="review-examples-row">' + examples.map(function (ex) {
           return '<figure class="review-example">' +

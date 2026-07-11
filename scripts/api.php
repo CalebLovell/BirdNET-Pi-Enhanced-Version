@@ -1097,9 +1097,14 @@ if (preg_match('#^/api/v1/system/health$#', $requestUri)) {
   ]);
 
 } elseif (preg_match('#^/api/v1/reviews/examples$#', $requestUri)) {
-  // "Verify by comparison": known-good spectrograms of the same species from
-  // this station. Prefers human-confirmed clips; falls back to the station's
-  // highest-confidence detections when nothing is confirmed yet.
+  // "Verify by comparison": known-good clips of the same species from this
+  // station. Hybrid slot filling - 3 slots, in priority order:
+  //   1. clips the user confirmed at >=80% confidence (verified AND clean),
+  //   2. the station's strongest unverified matches (>=90%),
+  //   3. weaker confirmed clips.
+  // A new species starts as all strongest-matches; once three strong
+  // confirmed clips exist the strip is entirely the user's own verified
+  // audio and the model's opinion drops out.
   $sci = isset($_GET['q']) ? trim($_GET['q']) : (isset($_GET['sci_name']) ? trim($_GET['sci_name']) : '');
   if ($sci === '') {
     api_error('sci_name is required');
@@ -1119,31 +1124,42 @@ if (preg_match('#^/api/v1/system/health$#', $requestUri)) {
     return !$clip_check || file_exists($clip_base . '/' . $rel);
   };
 
+  $confirmed_strong = [];
+  $confirmed_weak = [];
   if (spine_table_exists($db, 'detection_reviews')) {
     $ex_stmt = $db->prepare("SELECT r.file_name, r.date, r.com_name, d.Confidence
       FROM detection_reviews r JOIN detections d ON d.File_Name = r.file_name
       WHERE r.sci_name = :sci AND r.status = 'confirmed' AND r.file_name != :exclude
-      ORDER BY d.Confidence DESC LIMIT 12");
+      ORDER BY d.Confidence DESC LIMIT 24");
     if ($ex_stmt) {
       $ex_stmt->bindValue(':sci', $sci, SQLITE3_TEXT);
       $ex_stmt->bindValue(':exclude', $exclude, SQLITE3_TEXT);
       $ex_res = db_execute_safe($db, $ex_stmt, 'review examples confirmed');
-      while (count($examples) < 3 && ($row = db_fetch_assoc_safe($ex_res))) {
+      while ((count($confirmed_strong) + count($confirmed_weak)) < 6 && ($row = db_fetch_assoc_safe($ex_res))) {
         $rel = detection_clip_relative_path($row['date'], $row['com_name'], $row['file_name']);
         if (!$clip_exists($rel)) {
           continue;
         }
         $seen[$row['file_name']] = true;
-        $examples[] = [
+        $entry = [
           'file' => $row['file_name'],
           'clip_path' => $rel,
           'confidence' => round((float)$row['Confidence'], 4),
           'source' => 'confirmed'
         ];
+        if ((float)$row['Confidence'] >= 0.8) {
+          $confirmed_strong[] = $entry;
+        } else {
+          $confirmed_weak[] = $entry;
+        }
       }
     }
   }
 
+  // Slot 1: strong confirmed clips
+  $examples = array_slice($confirmed_strong, 0, 3);
+
+  // Slot 2: strongest unverified matches fill what remains
   if (count($examples) < 3) {
     $fb_stmt = $db->prepare('SELECT File_Name, Date, Com_Name, Confidence FROM detections
       WHERE Sci_Name = :sci AND File_Name != :exclude AND Confidence >= 0.9
@@ -1168,6 +1184,14 @@ if (preg_match('#^/api/v1/system/health$#', $requestUri)) {
         ];
       }
     }
+  }
+
+  // Slot 3: weaker confirmed clips - still ground truth, just fainter audio
+  foreach ($confirmed_weak as $entry) {
+    if (count($examples) >= 3) {
+      break;
+    }
+    $examples[] = $entry;
   }
 
   /* Recent detections are the most likely to still be on disk; if nothing
