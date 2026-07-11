@@ -467,7 +467,7 @@ if (isset($_GET['ascii'])) {
                 $rank = 1;
                 foreach ($detections as $d) {
                     $hidden_class = ($rank > 10) ? 'hidden-item' : '';
-                    echo '<li class="report-item ' . $hidden_class . '" style="display:' . ($rank > 10 ? 'none' : 'flex') . '">';
+                    echo '<li class="report-item ' . $hidden_class . '">';
                     echo '  <div class="species-info">';
                     echo '    <span class="species-name">' . $d['name'] . '</span>';
                     echo '    <span class="species-sci">' . $d['sci'] . '</span>';
@@ -500,7 +500,7 @@ if (isset($_GET['ascii'])) {
                     if ($d['is_first_seen']) {
                         $new_count++;
                         $hidden_class = ($new_rank > 10) ? 'hidden-item' : '';
-                        echo '<li class="report-item ' . $hidden_class . '" style="display:' . ($new_rank > 10 ? 'none' : 'flex') . '">';
+                        echo '<li class="report-item ' . $hidden_class . '">';
                         echo '  <div class="species-info">';
                         echo '    <span class="species-name">' . $d['name'] . '</span>';
                         echo '    <span class="species-sci">' . $d['sci'] . '</span>';
@@ -541,7 +541,10 @@ function toggleReportItems(btn) {
     
     items.forEach((item, index) => {
         if (index >= 10) {
-            item.style.display = isExpanded ? 'none' : 'flex';
+            // Toggle the class: .hidden-item is display:none !important
+            // (declared by the including insights page), so an inline
+            // style can never reveal a row.
+            item.classList.toggle('hidden-item', isExpanded);
         }
     });
     
