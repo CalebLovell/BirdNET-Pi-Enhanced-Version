@@ -380,7 +380,43 @@ if (isset($_GET['ascii'])) {
         opacity: 1;
         bottom: 140%;
     }
-
+    /* ===== Print: a clean A4 report (issue #15) =====
+       Hide the app shell, flatten the cards, and always print every
+       species row (the on-screen "Show all" state is ignored). */
+    @page { size: A4; margin: 12mm; }
+    @media print {
+        .sidebar, .mobile-header, .bottom-nav, #live-audio-panel,
+        .palette-overlay, .insights-header, .period-tabs, .nav-arrow,
+        .show-list-btn, .info-btn { display: none !important; }
+        body { background: #fff !important; }
+        .views { margin: 0 !important; padding: 0 !important; width: 100% !important; max-width: none !important; }
+        .report-container { padding: 0 !important; max-width: none !important; }
+        .report-header, .kpi-card, .report-section {
+            box-shadow: none !important;
+            border: 1px solid #ccc !important;
+            background: #fff !important;
+            color: #000 !important;
+        }
+        .report-header { padding: 12px !important; margin-bottom: 14px !important; }
+        /* The gradient-clipped title prints as invisible ink without this reset */
+        .report-header h1 {
+            background: none !important;
+            -webkit-background-clip: initial !important;
+            -webkit-text-fill-color: initial !important;
+            color: #000 !important;
+            font-size: 1.6em !important;
+        }
+        .report-date, .kpi-label, .species-sci { color: #333 !important; }
+        .kpi-cards { page-break-inside: avoid; margin-bottom: 16px !important; }
+        .kpi-card { padding: 10px !important; min-width: 120px !important; }
+        /* One column so long species lists flow cleanly down the page */
+        .sections-grid { display: block !important; }
+        .report-section { margin-bottom: 16px !important; }
+        .section-title { page-break-after: avoid; background: #fff !important; }
+        .report-item { display: flex !important; page-break-inside: avoid; padding: 5px 12px !important; }
+        .count-num, .species-name { color: #000 !important; }
+        footer { color: #333 !important; }
+    }
 </style>
 
 <div class="report-container">
