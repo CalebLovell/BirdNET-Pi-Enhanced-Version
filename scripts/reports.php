@@ -380,6 +380,7 @@ if (isset($_GET['ascii'])) {
         opacity: 1;
         bottom: 140%;
     }
+
 </style>
 
 <div class="report-container">
@@ -445,7 +446,7 @@ if (isset($_GET['ascii'])) {
                 ?>
             </ul>
             <?php if (count($detections) > 10): ?>
-            <button class="show-list-btn" onclick="toggleItems(this)" data-expanded="false" 
+            <button class="show-list-btn" onclick="toggleReportItems(this)" data-expanded="false" 
                     data-show-text="Show all <?php echo count($detections); ?> species ↓" 
                     data-hide-text="Show top 10 species ↑">
                 Show all <?php echo count($detections); ?> species ↓
@@ -481,7 +482,7 @@ if (isset($_GET['ascii'])) {
                 ?>
             </ul>
             <?php if ($new_count > 10): ?>
-            <button class="show-list-btn" onclick="toggleItems(this)" data-expanded="false" 
+            <button class="show-list-btn" onclick="toggleReportItems(this)" data-expanded="false" 
                     data-show-text="Show all <?php echo $new_count; ?> new species ↓" 
                     data-hide-text="Show top 10 new species ↑">
                 Show all <?php echo $new_count; ?> new species ↓
@@ -497,7 +498,7 @@ if (isset($_GET['ascii'])) {
 </div>
 
 <script>
-function toggleItems(btn) {
+function toggleReportItems(btn) {
     const list = btn.previousElementSibling;
     const items = list.querySelectorAll('.report-item');
     const isExpanded = btn.getAttribute('data-expanded') === 'true';
