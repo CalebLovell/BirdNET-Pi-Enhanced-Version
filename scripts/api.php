@@ -1159,16 +1159,21 @@ if (preg_match('#^/api/v1/system/health$#', $requestUri)) {
   // Slot 1: strong confirmed clips
   $examples = array_slice($confirmed_strong, 0, 3);
 
-  // Slot 2: strongest unverified matches fill what remains
+  // Slot 2: strongest unverified matches fill what remains. Scan the most
+  // RECENT high-confidence detections, not the all-time strongest: on a
+  // long-running station the all-time top clips are months old and purged
+  // from disk, so an all-time scan finds nothing that still exists. Recent
+  // candidates survive; rank the survivors by confidence.
   if (count($examples) < 3) {
     $fb_stmt = $db->prepare('SELECT File_Name, Date, Com_Name, Confidence FROM detections
       WHERE Sci_Name = :sci AND File_Name != :exclude AND Confidence >= 0.9
-      ORDER BY Confidence DESC LIMIT 40');
+      ORDER BY Date DESC, Time DESC LIMIT 60');
     if ($fb_stmt) {
       $fb_stmt->bindValue(':sci', $sci, SQLITE3_TEXT);
       $fb_stmt->bindValue(':exclude', $exclude, SQLITE3_TEXT);
       $fb_res = db_execute_safe($db, $fb_stmt, 'review examples fallback');
-      while (count($examples) < 3 && ($row = db_fetch_assoc_safe($fb_res))) {
+      $candidates = [];
+      while ($row = db_fetch_assoc_safe($fb_res)) {
         if (isset($seen[$row['File_Name']])) {
           continue;
         }
@@ -1176,12 +1181,21 @@ if (preg_match('#^/api/v1/system/health$#', $requestUri)) {
         if (!$clip_exists($rel)) {
           continue;
         }
-        $examples[] = [
+        $candidates[] = [
           'file' => $row['File_Name'],
           'clip_path' => $rel,
           'confidence' => round((float)$row['Confidence'], 4),
           'source' => 'high_confidence'
         ];
+      }
+      usort($candidates, function ($a, $b) {
+        return $b['confidence'] <=> $a['confidence'];
+      });
+      foreach ($candidates as $entry) {
+        if (count($examples) >= 3) {
+          break;
+        }
+        $examples[] = $entry;
       }
     }
   }
