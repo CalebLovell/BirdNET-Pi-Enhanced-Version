@@ -118,3 +118,7 @@ sqlite3 "$DB_FILE" "UPDATE $DETECTIONS_TABLE SET Sci_Name = '$NEWNAME_sciname', 
 [[ "$OUTPUT_TYPE" == "debug" ]] && echo "Database entry removed"
 
 [[ "$OUTPUT_TYPE" == "debug" ]] && echo "All done!"
+
+# A guarded echo as the last command returns 1 when the guard is false,
+# which made every successful non-debug run report failure to the web UI.
+exit 0
