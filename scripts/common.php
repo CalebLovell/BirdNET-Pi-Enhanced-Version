@@ -189,7 +189,9 @@ function is_protected_view($view) {
 
 function ensure_authenticated($error_message = 'You cannot edit the settings for this installation') {
   if (!is_authenticated()) {
-    header('WWW-Authenticate: Basic realm="My Realm"');
+    // Same realm as api.php: one protection space, so credentials cached by
+    // signing in anywhere on the station work everywhere on it.
+    header('WWW-Authenticate: Basic realm="BirdNET-Pi"');
     header('HTTP/1.0 401 Unauthorized');
     // If in an iframe and the browser blocks the popup, this body will be rendered.
     // We attempt to breakout and reload at the top level so the popup can show.

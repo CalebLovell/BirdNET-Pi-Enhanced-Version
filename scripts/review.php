@@ -287,26 +287,57 @@ require_once 'scripts/common.php';
     go.disabled = true;
     var done = 0;
     var failed = 0;
+    var lastError = '';
+
+    var finish = function () {
+      go.disabled = false;
+      if (failed === 0) {
+        document.getElementById('reassignModal').style.display = 'none';
+        markCardDone(reassignTarget, 'Reassigned ' + done + ' detection' + (done === 1 ? '' : 's') + ' to ' + esc(newLabel.split('_')[1] || newLabel) + '.');
+      } else {
+        status.innerHTML = '<span class="review-error">' + done + ' renamed, ' + failed + ' failed. ' + lastError + '</span>';
+      }
+    };
 
     var next = function () {
       if (done + failed >= clips.length) {
-        go.disabled = false;
-        if (failed === 0) {
-          document.getElementById('reassignModal').style.display = 'none';
-          markCardDone(reassignTarget, 'Reassigned ' + done + ' detection' + (done === 1 ? '' : 's') + ' to ' + esc(newLabel.split('_')[1] || newLabel) + '.');
-        } else {
-          status.innerHTML = '<span class="review-error">' + done + ' renamed, ' + failed + ' failed. Check sign-in and retry.</span>';
-        }
+        finish();
         return;
       }
       status.innerHTML = '<span class="review-done">Reassigning ' + (done + failed + 1) + ' of ' + clips.length + '&hellip;</span>';
-      fetch('play.php?changefile=' + encodeURIComponent(clips[done + failed]) + '&newname=' + encodeURIComponent(newLabel))
-        .then(function (r) { return r.text(); })
+      fetch('play.php?changefile=' + encodeURIComponent(clips[done + failed]) + '&newname=' + encodeURIComponent(newLabel), { credentials: 'same-origin' })
+        .then(function (r) {
+          if (r.status === 401) {
+            // fetch() cannot show the browser's sign-in prompt; a page
+            // navigation can. Point at Settings, whose prompt covers the
+            // whole station, then the user can retry from here.
+            failed += clips.length - done - failed;
+            lastError = 'Your browser is not signed in to this station. ' +
+              '<a href="?view=Settings" target="_blank">Open Settings</a> to sign in, then retry.';
+            finish();
+            return null;
+          }
+          return r.text();
+        })
         .then(function (t) {
-          if (t.indexOf('OK') === 0) { done++; } else { failed++; }
+          if (t === null) return;
+          if (t.indexOf('OK') === 0) {
+            done++;
+          } else {
+            failed++;
+            // play.php answers "Error : <script output>" - show it instead
+            // of guessing; auth and rename-script failures look identical
+            // otherwise.
+            var detail = t.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 200);
+            lastError = detail !== '' ? esc(detail) : 'The rename script failed with no output.';
+          }
           next();
         })
-        .catch(function () { failed++; next(); });
+        .catch(function () {
+          failed++;
+          lastError = 'The station could not be reached.';
+          next();
+        });
     };
     next();
   });
