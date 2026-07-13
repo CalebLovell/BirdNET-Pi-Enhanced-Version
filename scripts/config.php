@@ -122,6 +122,11 @@ if(isset($_GET["latitude"])){
     $apprise_quiet_end = "";
   }
 
+  # Local temperature sensor (Home Assistant); values live in quotes in the conf
+  $ha_url = isset($_GET['ha_url']) ? trim(str_replace('"', '', $_GET['ha_url'])) : '';
+  $ha_token = isset($_GET['ha_token']) ? trim(str_replace('"', '', $_GET['ha_token'])) : '';
+  $ha_temp_entity = isset($_GET['ha_temp_entity']) ? trim(str_replace('"', '', $_GET['ha_temp_entity'])) : '';
+
   # Display & units
   $temperature_unit = (isset($_GET['temperature_unit']) && $_GET['temperature_unit'] === 'celsius') ? 'celsius' : 'fahrenheit';
   $wind_speed_unit = (isset($_GET['wind_speed_unit']) && in_array($_GET['wind_speed_unit'], ['kmh', 'ms'], true)) ? $_GET['wind_speed_unit'] : 'mph';
@@ -188,6 +193,9 @@ if(isset($_GET["latitude"])){
   $contents = preg_replace("/WIND_SPEED_UNIT=.*/", "WIND_SPEED_UNIT=$wind_speed_unit", $contents);
   $contents = preg_replace("/TIME_FORMAT=.*/", "TIME_FORMAT=$time_format", $contents);
   $contents = preg_replace("/NUMBER_FORMAT=.*/", "NUMBER_FORMAT=$number_format_pref", $contents);
+  $contents = preg_replace("/HA_URL=.*/", "HA_URL=\"$ha_url\"", $contents);
+  $contents = preg_replace("/HA_TOKEN=.*/", "HA_TOKEN=\"$ha_token\"", $contents);
+  $contents = preg_replace("/HA_TEMP_ENTITY=.*/", "HA_TEMP_ENTITY=\"$ha_temp_entity\"", $contents);
   $contents = preg_replace("/SIDEBAR_SITE_NAME=.*/", "SIDEBAR_SITE_NAME=$sidebar_site_name", $contents);
   $contents = preg_replace("/IMAGE_PROVIDER=.*/", "IMAGE_PROVIDER=$image_provider", $contents);
   $contents = preg_replace("/FLICKR_API_KEY=.*/", "FLICKR_API_KEY=$flickr_api_key", $contents);
@@ -468,6 +476,24 @@ function runProcess() {
         </tr>
       </table>
       <p>Set your Latitude and Longitude to 4 decimal places. Get your coordinates <a href="https://latlong.net" target="_blank">here</a>.</p>
+      <h3>Local temperature sensor (optional)</h3>
+      <table class="settingstable plaintable">
+        <tr>
+          <td><label for="ha_url">Home Assistant URL:</label></td>
+          <td><input name="ha_url" type="text" placeholder="http://homeassistant.local:8123" value="<?php print(htmlspecialchars($config['HA_URL'] ?? '')); ?>"/></td>
+        </tr>
+        <tr>
+          <td><label for="ha_token">Access token:</label></td>
+          <td><input name="ha_token" type="password" autocomplete="off" value="<?php print(htmlspecialchars($config['HA_TOKEN'] ?? '')); ?>"/></td>
+        </tr>
+        <tr>
+          <td><label for="ha_temp_entity">Temperature entity:</label></td>
+          <td><input name="ha_temp_entity" type="text" placeholder="sensor.backyard_temperature" value="<?php print(htmlspecialchars($config['HA_TEMP_ENTITY'] ?? '')); ?>"/></td>
+        </tr>
+      </table>
+      <p>Leave blank to use online weather. When set, the current hour's temperature comes from your own sensor,
+      and falls back to online weather automatically if the sensor is unreachable or its reading hasn't changed
+      in over an hour. Create a long-lived access token in Home Assistant under your profile &rarr; Security.</p>
       </td></tr></table><br>
       <table class="settingstable"><tr><td>
       <h2 id="settings-display">Display & Units</h2>

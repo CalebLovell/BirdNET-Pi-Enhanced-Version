@@ -19,6 +19,13 @@ FETCH_ATTEMPTS = 3
 RETRY_DELAY_SECONDS = [30, 60]
 PAST_DAYS = 7
 
+# A local Home Assistant temperature sensor (HA_URL/HA_TOKEN/HA_TEMP_ENTITY)
+# can override the CURRENT hour's temperature. Readings older than this are
+# treated as a frozen or disconnected sensor and ignored - Open-Meteo's value
+# stands, which is the automatic fallback.
+HA_MAX_AGE_SECONDS = 3600
+HA_TIMEOUT_SECONDS = 10
+
 def fetch_hourly(lat, lon):
     url = (f"https://api.open-meteo.com/v1/forecast?latitude={lat}&longitude={lon}"
            "&hourly=temperature_2m,weather_code,is_day,wind_speed_10m,wind_direction_10m"
@@ -38,6 +45,71 @@ def fetch_hourly(lat, lon):
                 log.error(f"Weather fetch failed after {FETCH_ATTEMPTS} attempts: {e}")
     return None
 
+def to_fahrenheit(value, unit):
+    unit = (unit or '').strip()
+    if unit in ('°F', 'F'):
+        return value
+    if unit == 'K':
+        return (value - 273.15) * 9 / 5 + 32
+    # HA temperature sensors default to °C outside the US; treat an unknown
+    # unit as Celsius rather than silently storing a wrong-scale value.
+    return value * 9 / 5 + 32
+
+
+def fetch_ha_temperature(conf):
+    """Current temperature (°F) from a Home Assistant sensor, or None.
+
+    None means "use the online value" - the caller falls back silently. Any
+    failure (unconfigured, unreachable, bad token, dead entity, non-numeric
+    state, or a reading that has not changed in HA_MAX_AGE_SECONDS) lands
+    there; a genuinely rock-steady temperature would too, but outdoors at
+    sensor resolution that does not happen inside an hour.
+    """
+    url = (conf.get('HA_URL') or '').strip().rstrip('/')
+    token = (conf.get('HA_TOKEN') or '').strip()
+    entity = (conf.get('HA_TEMP_ENTITY') or '').strip()
+    if not url or not token or not entity:
+        return None
+
+    try:
+        response = requests.get(
+            f"{url}/api/states/{entity}",
+            headers={'Authorization': f'Bearer {token}'},
+            timeout=HA_TIMEOUT_SECONDS,
+        )
+        response.raise_for_status()
+        state = response.json()
+    except Exception as e:
+        log.warning(f"Local sensor {entity} unreachable ({e}); using online temperature.")
+        return None
+
+    raw = state.get('state')
+    if raw in (None, 'unavailable', 'unknown'):
+        log.warning(f"Local sensor {entity} is {raw}; using online temperature.")
+        return None
+    try:
+        value = float(raw)
+    except (TypeError, ValueError):
+        log.warning(f"Local sensor {entity} state {raw!r} is not numeric; using online temperature.")
+        return None
+
+    last_changed = state.get('last_changed') or ''
+    try:
+        changed_at = datetime.fromisoformat(last_changed.replace('Z', '+00:00'))
+        age = (datetime.now(changed_at.tzinfo) - changed_at).total_seconds()
+    except ValueError:
+        log.warning(f"Local sensor {entity} has unparseable last_changed {last_changed!r}; using online temperature.")
+        return None
+    if age > HA_MAX_AGE_SECONDS:
+        log.warning(f"Local sensor {entity} value unchanged for {int(age // 60)} min; using online temperature.")
+        return None
+
+    unit = (state.get('attributes') or {}).get('unit_of_measurement')
+    temp_f = round(to_fahrenheit(value, unit), 1)
+    log.info(f"Local sensor {entity}: {raw}{unit or ''} -> {temp_f}°F (changed {int(age)}s ago).")
+    return temp_f
+
+
 def update_weather():
     conf = get_settings()
     lat = conf.get('LATITUDE', None)
@@ -50,6 +122,8 @@ def update_weather():
     data = fetch_hourly(lat, lon)
     if data is None:
         return
+
+    local_temp = fetch_ha_temperature(conf)
 
     # Parse data
     times = data['hourly']['time']
@@ -99,6 +173,14 @@ def update_weather():
             cur.execute("INSERT OR REPLACE INTO weather (Date, Hour, Temp, ConditionCode, IsDay, WindSpeed, WindDirection) VALUES (?, ?, ?, ?, ?, ?, ?)",
                         (date_str, hour, temp, code, is_day, wind, direction))
                         
+        # The local sensor wins the current hour when healthy; every other
+        # hour (and every fallback case) keeps the online value.
+        if local_temp is not None:
+            now = datetime.now()
+            cur.execute("UPDATE weather SET Temp = ? WHERE Date = ? AND Hour = ?",
+                        (local_temp, now.strftime('%Y-%m-%d'), now.hour))
+            log.info(f"Current hour temperature set from local sensor: {local_temp}°F.")
+
         con.commit()
         con.close()
         log.info("Hourly weather data synced successfully to birds.db.")

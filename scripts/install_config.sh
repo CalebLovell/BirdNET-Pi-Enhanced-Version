@@ -117,6 +117,15 @@ APPRISE_QUIET_HOURS_END=""
 ## Detections of a species within this many quiet minutes belong to one visit
 VISIT_GAP_MINUTES=5
 
+#----------------------  Local Temperature Sensor ------------------------#
+## Optional: current-hour temperature from a Home Assistant sensor instead of
+## the online weather model. Leave blank to disable. Falls back to online
+## weather automatically when the sensor is unreachable, unavailable, or its
+## value has not changed in over an hour.
+HA_URL=""
+HA_TOKEN=""
+HA_TEMP_ENTITY=""
+
 #----------------------  Display & Units ------------------------#
 ## fahrenheit or celsius (weather is stored in Fahrenheit; display converts)
 TEMPERATURE_UNIT=fahrenheit

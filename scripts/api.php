@@ -1326,6 +1326,48 @@ if (preg_match('#^/api/v1/system/health$#', $requestUri)) {
     'action' => $weather_status === 'ok' ? null : 'Weather syncs hourly; check internet connectivity if it stays stale.'
   ];
 
+  // Local temperature sensor (only checked when configured): a live probe
+  // showing whether the current hour is using the sensor or the online
+  // fallback. The fallback working is a warn, never an error.
+  $ha_url = rtrim(trim((string)($config['HA_URL'] ?? '')), '/');
+  $ha_token = trim((string)($config['HA_TOKEN'] ?? ''));
+  $ha_entity = trim((string)($config['HA_TEMP_ENTITY'] ?? ''));
+  if ($ha_url !== '' && $ha_token !== '' && $ha_entity !== '') {
+    $ha_status = 'warn';
+    $ha_message = 'Sensor could not be reached; the current hour uses online weather.';
+    $ctx = stream_context_create(['http' => [
+      'method' => 'GET',
+      'header' => "Authorization: Bearer $ha_token\r\nAccept: application/json\r\n",
+      'timeout' => 5,
+      'ignore_errors' => true
+    ]]);
+    $ha_raw = @file_get_contents($ha_url . '/api/states/' . rawurlencode($ha_entity), false, $ctx);
+    if ($ha_raw !== false) {
+      $ha_state = json_decode($ha_raw, true);
+      $raw_val = isset($ha_state['state']) ? $ha_state['state'] : null;
+      if ($raw_val !== null && $raw_val !== 'unavailable' && $raw_val !== 'unknown' && is_numeric($raw_val)) {
+        $changed = isset($ha_state['last_changed']) ? strtotime($ha_state['last_changed']) : false;
+        $age = $changed !== false ? time() - $changed : PHP_INT_MAX;
+        $unit = isset($ha_state['attributes']['unit_of_measurement']) ? $ha_state['attributes']['unit_of_measurement'] : '';
+        if ($age <= 3600) {
+          $ha_status = 'ok';
+          $ha_message = "$ha_entity reads $raw_val$unit (updated " . round($age / 60) . " min ago); the current hour uses your sensor.";
+        } else {
+          $ha_message = "$ha_entity has not changed in " . round($age / 60) . " min; the current hour uses online weather.";
+        }
+      } else {
+        $ha_message = "$ha_entity is " . ($raw_val === null ? 'missing' : $raw_val) . '; the current hour uses online weather.';
+      }
+    }
+    $checks[] = [
+      'id' => 'local_sensor',
+      'label' => 'Local temperature sensor',
+      'status' => $ha_status,
+      'message' => $ha_message,
+      'action' => $ha_status === 'ok' ? null : 'Check the Home Assistant URL, token, and entity in Tools > Settings. Online weather covers the gap meanwhile.'
+    ];
+  }
+
   $lat = isset($config['LATITUDE']) ? $config['LATITUDE'] : '';
   $lon = isset($config['LONGITUDE']) ? $config['LONGITUDE'] : '';
   $loc_ok = $lat !== '' && $lon !== '' && $lat !== '0.000' && $lon !== '0.000';
