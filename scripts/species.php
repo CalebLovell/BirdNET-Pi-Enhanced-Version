@@ -208,24 +208,25 @@ if ($is_species_ajax) {
 .kpi-row { display: flex; gap: 20px; align-items: stretch; }
 .kpi-card {
     background: var(--bg-card);
-    padding: 20px 24px;
+    padding: 12px 28px;
     border-radius: 12px;
     border: 1px solid var(--border-light, #f1f5f9);
     display: flex;
     align-items: center;
     gap: 16px;
-    min-width: 200px;
+    min-width: 280px;
     box-shadow: 0 1px 3px rgba(0,0,0,0.05);
 }
 .kpi-icon {
-    width: 48px; height: 48px;
+    width: 40px; height: 40px;
     border-radius: 50%;
     background: #eff6ff;
     color: #3b82f6;
     display: flex;
     align-items: center;
     justify-content: center;
-    font-size: 1.4rem;
+    font-size: 1.2rem;
+    flex-shrink: 0;
 }
 .kpi-info { display: flex; flex-direction: column; }
 .kpi-label { font-size: 0.9rem; font-weight: 600; color: var(--text-heading); }
@@ -260,7 +261,38 @@ if ($is_species_ajax) {
 .search-group { grid-column: 1 / -1; }
 .filter-footer { display: flex; justify-content: space-between; align-items: center; margin-top: 20px; }
 .results-count { font-size: 0.85rem; color: var(--text-muted); }
-.filter-actions { display: flex; gap: 12px; }
+.filter-actions { display: flex; gap: 12px; align-items: center; }
+/* These classes had no styles at all: Apply fell back to the browser's
+   default button, Reset was a bare baseline-aligned link (it sat higher),
+   and Export CSV compensated with an unreadable inline dark background. */
+.btn-apply, .btn-reset, .btn-export {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 10px 18px;
+    border-radius: 8px;
+    font-size: 0.9rem;
+    font-weight: 600;
+    line-height: 1;
+    cursor: pointer;
+    text-decoration: none;
+    transition: background 0.15s, color 0.15s, border-color 0.15s;
+}
+.btn-apply {
+    background: var(--accent, #4f46e5);
+    color: #fff;
+    border: 1px solid var(--accent, #4f46e5);
+}
+.btn-apply:hover { filter: brightness(1.08); }
+.btn-reset, .btn-export {
+    background: var(--bg-card);
+    color: var(--text-secondary, #64748b);
+    border: 1px solid var(--border);
+}
+.btn-reset:hover, .btn-export:hover {
+    color: var(--text-primary);
+    border-color: var(--accent, #4f46e5);
+}
 
 /* Grid */
 .species-grid {
@@ -392,8 +424,8 @@ if ($is_species_ajax) {
                 <span class="results-count" id="species-results-count">Showing <?php echo min($species_total, $species_offset + count($species_list)); ?> of <?php echo format_number($species_total); ?> species</span>
                 <div class="filter-actions">
                     <a href="?view=Species" class="btn-reset">Reset</a>
-                    <button type="submit" class="btn-apply text-white">Apply Filters</button>
-                    <button type="submit" name="export" value="csv" class="btn-apply" style="background: #475569 !important;">📥 Export CSV</button>
+                    <button type="submit" class="btn-apply">Apply Filters</button>
+                    <button type="submit" name="export" value="csv" class="btn-export">📥 Export CSV</button>
                 </div>
             </div>
         </form>
