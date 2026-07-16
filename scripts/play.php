@@ -46,6 +46,18 @@ function recording_absolute_path($home, $relative, $shifted = false) {
   return $home . '/BirdSongs/Extracted/By_Date/' . ($shifted ? 'shifted/' : '') . $relative;
 }
 
+function require_ajax_request() {
+  /* CSRF defense for state-changing GET branches (same idea as api.php's
+     POST guard): a cross-site <img>/<form> cannot send this header, our
+     own XHR/fetch callers all do. */
+  $h = isset($_SERVER['HTTP_X_REQUESTED_WITH']) ? $_SERVER['HTTP_X_REQUESTED_WITH'] : '';
+  if (strcasecmp($h, 'XMLHttpRequest') !== 0) {
+    http_response_code(403);
+    echo 'Error : missing X-Requested-With header';
+    die();
+  }
+}
+
 function recording_file_name($relative) {
   $parts = explode('/', $relative);
   return end($parts);
@@ -56,6 +68,7 @@ $db->busyTimeout(1000);
 
 if(isset($_GET['deletefile'])) {
   ensure_authenticated('You must be authenticated to delete files.');
+  require_ajax_request();
   $relative_file = normalize_recording_relative_path($_GET['deletefile']);
   if ($relative_file === false) {
     echo "Error";
@@ -85,6 +98,7 @@ if(isset($_GET['deletefile'])) {
 
 if(isset($_GET['excludefile'])) {
   ensure_authenticated('You must be authenticated to change the protection of files.');
+  require_ajax_request();
   $relative_file = normalize_recording_relative_path($_GET['excludefile']);
   if ($relative_file === false) {
     echo "Error";
@@ -125,6 +139,7 @@ if(isset($_GET['getlabels'])) {
 
 if(isset($_GET['changefile']) && isset($_GET['newname'])) {
   ensure_authenticated('You must be authenticated to delete files.');
+  require_ajax_request();
   $relative_file = normalize_recording_relative_path($_GET['changefile']);
   if ($relative_file === false) {
     echo "Error";
@@ -197,6 +212,7 @@ $shifted_path = $home."/BirdSongs/Extracted/By_Date/shifted/";
 
 if(isset($_GET['shiftfile'])) {
   ensure_authenticated('You cannot shift files for this installation');
+  require_ajax_request();
 
     $filename = normalize_recording_relative_path($_GET['shiftfile']);
     if ($filename === false) {
@@ -292,6 +308,7 @@ function deleteDetection(filename,copylink=false) {
       }
     }
     xhttp.open("GET", "play.php?deletefile="+encodeURIComponent(filename), true);
+    xhttp.setRequestHeader("X-Requested-With", "XMLHttpRequest");
     xhttp.send();
   };
 
@@ -330,8 +347,10 @@ function toggleLock(filename, type, elem) {
   }
   if(type == "add") {
     xhttp.open("GET", "play.php?excludefile="+encodeURIComponent(filename)+"&exclude_add=true", true);
+    xhttp.setRequestHeader("X-Requested-With", "XMLHttpRequest");
   } else {
     xhttp.open("GET", "play.php?excludefile="+encodeURIComponent(filename)+"&exclude_del=true", true);
+    xhttp.setRequestHeader("X-Requested-With", "XMLHttpRequest");
   }
   xhttp.send();
   elem.setAttribute("src","images/spinner.gif");
@@ -375,9 +394,11 @@ function toggleShiftFreq(filename, shiftAction, elem) {
   if(shiftAction == "shift") {
     console.log("shifting freqs of " + filename);
     xhttp.open("GET", "play.php?shiftfile="+encodeURIComponent(filename)+"&doshift=true", true);
+    xhttp.setRequestHeader("X-Requested-With", "XMLHttpRequest");
   } else {
     console.log("unshifting freqs of " + filename);
     xhttp.open("GET", "play.php?shiftfile="+encodeURIComponent(filename), true);
+    xhttp.setRequestHeader("X-Requested-With", "XMLHttpRequest");
   }
   xhttp.send();
   elem.setAttribute("src","images/spinner.gif");
@@ -485,6 +506,7 @@ function changeDetection(filename,copylink=false) {
           }
         }
         xhttp2.open("GET", "play.php?changefile="+encodeURIComponent(filename)+"&newname="+encodeURIComponent(newname), true);
+    xhttp2.setRequestHeader("X-Requested-With", "XMLHttpRequest");
         xhttp2.send();
       };
 

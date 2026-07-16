@@ -315,7 +315,7 @@ require_once 'scripts/common.php';
         return;
       }
       status.innerHTML = '<span class="review-done">Reassigning ' + (done + failed + 1) + ' of ' + clips.length + '&hellip;</span>';
-      fetch('play.php?changefile=' + encodeURIComponent(clips[done + failed]) + '&newname=' + encodeURIComponent(newLabel), { credentials: 'same-origin' })
+      fetch('play.php?changefile=' + encodeURIComponent(clips[done + failed]) + '&newname=' + encodeURIComponent(newLabel), { credentials: 'same-origin', headers: { 'X-Requested-With': 'XMLHttpRequest' } })
         .then(function (r) {
           if (r.status === 401) {
             // fetch() cannot show the browser's sign-in prompt; a page

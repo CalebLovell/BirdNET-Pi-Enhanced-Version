@@ -361,6 +361,7 @@ if (get_included_files()[0] === __FILE__) {
         }
       }
       xhttp.open("GET", "play.php?deletefile="+encodeURIComponent(filename), true);
+      xhttp.setRequestHeader("X-Requested-With", "XMLHttpRequest");
       xhttp.send();
     };
 
