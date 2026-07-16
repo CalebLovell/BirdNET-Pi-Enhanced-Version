@@ -404,7 +404,7 @@
         <div class="filter-controls">
             <div class="filter-group">
                 <label for="time-period">Time Period</label>
-                <select id="time-period" class="styled-select">
+                <select id="time-period" class="styled-select" onchange="applyFilters()">
                     <option value="1">Last 24 Hours</option>
                     <option value="7" selected>Last 7 Days</option>
                     <option value="30">Last 30 Days</option>
