@@ -91,6 +91,11 @@ Or run the whole suite (pages, read API, write API guards and round-trips):
 BASE=http://127.0.0.1:8123 AUTH=birdnet:devpassword bash tests/smoke_api.sh
 ```
 
+Add `RESEED=1` (and `PHP_BIN="<php> -c <ini>"` if PHP isn't on PATH) to reseed
+the demo DB first — the seeded data is date-relative and the current-hour
+checks go stale within hours, so always reseed when running the suite on a
+dev box that has been up a while.
+
 ## Data-spine API (Phase 1)
 
 Shared layers live in `scripts/common.php` (`get_visits`, `visits_from_detections`,

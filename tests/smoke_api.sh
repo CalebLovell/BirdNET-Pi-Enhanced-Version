@@ -3,6 +3,19 @@
 # Usage: BASE=http://127.0.0.1:8123 AUTH=birdnet:devpassword bash tests/smoke_api.sh
 set -u
 
+# The demo data is date-relative and goes stale within hours, failing the
+# current-hour checks. RESEED=1 reseeds it first (opt-in so this can never
+# run against a database that is not the throwaway dev demo; the seeder
+# additionally refuses real databases without --force on its own).
+if [ "${RESEED:-0}" = "1" ]; then
+  # PHP_BIN is intentionally unquoted: it may carry flags (php -c dev.ini)
+  if ${PHP_BIN:-php} "$(dirname "$0")/seed_demo_db.php" --force >/dev/null; then
+    echo "== Reseeded demo DB =="
+  else
+    echo "WARN: reseed failed; continuing"
+  fi
+fi
+
 BASE="${BASE:-http://127.0.0.1:8123}"
 AUTH="${AUTH:-birdnet:devpassword}"
 PASS=0
