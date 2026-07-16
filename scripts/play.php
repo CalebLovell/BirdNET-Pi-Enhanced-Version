@@ -132,9 +132,60 @@ if(isset($_GET['changefile']) && isset($_GET['newname'])) {
   }
   $oldname = recording_file_name($relative_file);
   $newname = request_value($_GET['newname']);
+
+  // Captured BEFORE the rename: the script rewrites the detections row, and
+  // the review-history / purge-protection follow-ups below need the old
+  // species to compute what the script renamed the file to.
+  $old_stmt = $db->prepare('SELECT Sci_Name, Com_Name, Date FROM detections WHERE File_Name = :f LIMIT 1');
+  $old_row = null;
+  if ($old_stmt) {
+    $old_stmt->bindValue(':f', $oldname, SQLITE3_TEXT);
+    $old_row = db_fetch_assoc_safe(db_execute_safe($db, $old_stmt, 'changefile old row'));
+  }
+
   $output = [];
   exec("sudo -u ".escapeshellarg($user)." ".escapeshellarg($home."/BirdNET-Pi/scripts/birdnet_changeidentification.sh")." ".escapeshellarg($oldname)." ".escapeshellarg($newname)." log_errors 2>&1", $output, $status);
   if ($status === 0) {
+    /* The rename script updates detections and moves the files, but two
+       other places still reference the old name: detection_reviews (the
+       trust-loop history) and disk_check_exclude.txt (crown purge
+       protection - stale lines there would let the cleaner delete a
+       protected clip). Carry both along. Any failure here degrades to the
+       old orphaning behavior, never worse. */
+    if ($old_row && strpos($newname, '_') !== false) {
+      $new_sci = substr($newname, 0, strpos($newname, '_'));
+      $new_com = substr($newname, strpos($newname, '_') + 1);
+      // Same sanitization and substitution the rename script applies
+      $old_com_safe = str_replace(' ', '_', str_replace("'", '', $old_row['Com_Name']));
+      $new_com_safe = str_replace(' ', '_', str_replace("'", '', $new_com));
+      $new_file = str_replace($old_com_safe, $new_com_safe, $oldname);
+
+      $rw = null;
+      try {
+        $rw = new SQLite3('./scripts/birds.db');
+        $rw->busyTimeout(5000);
+        $upd = $rw->prepare('UPDATE detection_reviews SET file_name = :nf, sci_name = :ns, com_name = :nc WHERE file_name = :of');
+        if ($upd) {
+          $upd->bindValue(':nf', $new_file, SQLITE3_TEXT);
+          $upd->bindValue(':ns', $new_sci, SQLITE3_TEXT);
+          $upd->bindValue(':nc', $new_com, SQLITE3_TEXT);
+          $upd->bindValue(':of', $oldname, SQLITE3_TEXT);
+          db_execute_safe($rw, $upd, 'changefile review follow');
+        }
+      } catch (Exception $e) {
+        error_log('changefile: review follow-up failed: ' . $e->getMessage());
+      }
+      if ($rw) {
+        $rw->close();
+      }
+
+      $old_rel = detection_clip_relative_path($old_row['Date'], $old_row['Com_Name'], $oldname);
+      $new_rel = detection_clip_relative_path($old_row['Date'], $new_com, $new_file);
+      if (purge_protected($old_rel)) {
+        purge_protect_remove($old_rel);
+        purge_protect_add($new_rel);
+      }
+    }
     echo "OK";
   } else {
     echo "Error : " . implode(", ", $output) . "<br>";

@@ -1168,6 +1168,15 @@ function purge_protect_add($relative) {
   return true;
 }
 
+function purge_protected($relative) {
+  $path = purge_exclude_path();
+  if (!file_exists($path)) {
+    return false;
+  }
+  $lines = @file($path, FILE_IGNORE_NEW_LINES) ?: [];
+  return in_array($relative, $lines, true);
+}
+
 function purge_protect_remove($relative) {
   $path = purge_exclude_path();
   if (!file_exists($path)) {
