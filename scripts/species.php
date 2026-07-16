@@ -183,7 +183,12 @@ if ($is_species_ajax) {
         'count' => count($species_list),
         'next_offset' => $next_offset,
         'total' => $species_total,
-        'has_more' => $next_offset < $species_total
+        'has_more' => $next_offset < $species_total,
+        // Header KPIs so in-place filter refreshes stay in sync with what a
+        // full page load would show for the same filters
+        'kpi_species' => (int)($kpi_res['unique_species'] ?? 0),
+        'kpi_detections' => (int)($kpi_res['total_detections'] ?? 0),
+        'kpi_conf' => round((float)($kpi_res['avg_conf'] ?? 0) * 100, 1)
     ]);
     exit;
 }
@@ -376,15 +381,15 @@ if ($is_species_ajax) {
                 <div class="kpi-icon">📋</div>
                 <div class="kpi-info">
                     <span class="kpi-label">Total Species</span>
-                    <span class="kpi-value"><?php echo format_number($kpi_res['unique_species']); ?></span>
-                    <span class="kpi-sub"><?php echo format_number($kpi_res['total_detections']); ?> detections</span>
+                    <span class="kpi-value" id="species-kpi-count"><?php echo format_number($kpi_res['unique_species']); ?></span>
+                    <span class="kpi-sub" id="species-kpi-detections"><?php echo format_number($kpi_res['total_detections']); ?> detections</span>
                 </div>
             </div>
             <div class="kpi-card">
                 <div class="kpi-icon">🎯</div>
                 <div class="kpi-info">
                     <span class="kpi-label">Avg. Confidence</span>
-                    <span class="kpi-value"><?php echo format_number($kpi_res['avg_conf'] * 100, 1); ?>%</span>
+                    <span class="kpi-value" id="species-kpi-conf"><?php echo format_number($kpi_res['avg_conf'] * 100, 1); ?>%</span>
                     <span class="kpi-sub">Overall average</span>
                 </div>
             </div>
@@ -397,7 +402,7 @@ if ($is_species_ajax) {
             <div class="filter-grid">
                 <div class="filter-group">
                     <label>Time Period</label>
-                    <select name="time_period" class="styled-select" data-ui-persist="species-time-period" onchange="this.form.submit()">
+                    <select name="time_period" class="styled-select" data-ui-persist="species-time-period" onchange="window.refreshSpecies && refreshSpecies()">
                         <option value="all" <?php echo $time_period == 'all' ? 'selected' : ''; ?>>All Time</option>
                         <option value="24h" <?php echo $time_period == '24h' ? 'selected' : ''; ?>>Last 24 Hours</option>
                         <option value="7d" <?php echo $time_period == '7d' ? 'selected' : ''; ?>>Last 7 Days</option>
@@ -408,7 +413,7 @@ if ($is_species_ajax) {
                 </div>
                 <div class="filter-group">
                     <label>Sort By</label>
-                    <select name="sort_by" class="styled-select" data-ui-persist="species-sort-by" onchange="this.form.submit()">
+                    <select name="sort_by" class="styled-select" data-ui-persist="species-sort-by" onchange="window.refreshSpecies && refreshSpecies()">
                         <option value="detections" <?php echo $sort_by == 'detections' ? 'selected' : ''; ?>>Most Detections</option>
                         <option value="com_name" <?php echo $sort_by == 'com_name' ? 'selected' : ''; ?>>Common Name</option>
                         <option value="sci_name" <?php echo $sort_by == 'sci_name' ? 'selected' : ''; ?>>Scientific Name</option>
@@ -455,27 +460,87 @@ if ($is_species_ajax) {
         }, 50);
     });
 
-    // Search applies as you type (the dropdowns already submit on change);
-    // the debounce waits for a typing pause so we don't reload mid-word.
-    // Enter and the Apply button keep working as before.
-    var searchInput = document.getElementById('species-search-input');
-    if (searchInput && filterForm) {
-        var searchTimer;
-        searchInput.addEventListener('input', function() {
-            clearTimeout(searchTimer);
-            searchTimer = setTimeout(function() {
-                filterForm.submit();
-            }, 700);
-        });
-    }
-
     var btn = document.getElementById('species-load-more');
-    if (!btn) return;
     var grid = document.getElementById('species-grid');
     var countLabel = document.getElementById('species-results-count');
     var errorBox = document.getElementById('species-load-error');
     var total = <?php echo (int)$species_total; ?>;
     var pageSize = <?php echo (int)$species_page_size; ?>;
+
+    function fmtNum(n) {
+        return Number(n).toLocaleString(window.BIRDNET_UNITS && window.BIRDNET_UNITS.numLocale);
+    }
+
+    function filterParams() {
+        var params = new URLSearchParams();
+        params.set('view', 'Species');
+        ['time_period', 'sort_by', 'search'].forEach(function(name) {
+            var field = filterForm ? filterForm.elements[name] : null;
+            if (field && field.value !== '') params.set(name, field.value);
+        });
+        return params;
+    }
+
+    // Filters update the grid in place - a full reload would blank the page
+    // and drop focus out of the search box mid-thought. Enter and the Apply
+    // button still do a normal submit, so everything works without JS too.
+    var lastFilterQuery = null;
+    window.refreshSpecies = function() {
+        if (!grid || !filterForm) { if (filterForm) filterForm.submit(); return; }
+        var params = filterParams();
+        var query = params.toString();
+        if (query === lastFilterQuery) return;
+        lastFilterQuery = query;
+        history.replaceState(null, '', '?' + query);
+
+        var fetchParams = new URLSearchParams(params);
+        fetchParams.set('ajax_species_batch', 'true');
+        fetchParams.set('limit', pageSize);
+        fetchParams.set('offset', 0);
+        grid.style.opacity = '0.5';
+        if (errorBox) errorBox.innerHTML = '';
+        fetch('views.php?' + fetchParams.toString(), { headers: { 'Accept': 'application/json' } })
+            .then(function(response) {
+                if (!response.ok) throw new Error('Species request failed');
+                return response.json();
+            })
+            .then(function(data) {
+                if (params.toString() !== lastFilterQuery) return; // superseded
+                grid.innerHTML = data.html || '';
+                total = data.total;
+                if (countLabel) countLabel.textContent = 'Showing ' + fmtNum(Math.min(data.total, data.next_offset)) + ' of ' + fmtNum(data.total) + ' species';
+                var kpiCount = document.getElementById('species-kpi-count');
+                var kpiDet = document.getElementById('species-kpi-detections');
+                var kpiConf = document.getElementById('species-kpi-conf');
+                if (kpiCount) kpiCount.textContent = fmtNum(data.kpi_species);
+                if (kpiDet) kpiDet.textContent = fmtNum(data.kpi_detections) + ' detections';
+                if (kpiConf) kpiConf.textContent = fmtNum(data.kpi_conf) + '%';
+                var wrap = document.getElementById('species-load-more-wrap');
+                if (wrap) wrap.hidden = !data.has_more;
+                if (btn) btn.dataset.nextOffset = data.next_offset;
+            })
+            .catch(function() {
+                if (window.BirdNETUI && errorBox) {
+                    BirdNETUI.setMessage(errorBox, 'error', 'Filter failed', 'Results could not be refreshed. Use Apply Filters to reload.');
+                }
+            })
+            .finally(function() {
+                grid.style.opacity = '';
+            });
+    };
+
+    // Search applies as you type; the debounce waits for a pause so we
+    // don't refetch mid-word.
+    var searchInput = document.getElementById('species-search-input');
+    if (searchInput && filterForm) {
+        var searchTimer;
+        searchInput.addEventListener('input', function() {
+            clearTimeout(searchTimer);
+            searchTimer = setTimeout(window.refreshSpecies, 500);
+        });
+    }
+
+    if (!btn) return;
 
     btn.addEventListener('click', function() {
         var nextOffset = parseInt(btn.dataset.nextOffset || '0', 10);
@@ -496,7 +561,8 @@ if ($is_species_ajax) {
             .then(function(data) {
                 grid.insertAdjacentHTML('beforeend', data.html || '');
                 btn.dataset.nextOffset = data.next_offset;
-                if (countLabel) countLabel.textContent = 'Showing ' + data.next_offset.toLocaleString(window.BIRDNET_UNITS.numLocale) + ' of ' + total.toLocaleString(window.BIRDNET_UNITS.numLocale) + ' species';
+                total = data.total;
+                if (countLabel) countLabel.textContent = 'Showing ' + fmtNum(Math.min(data.total, data.next_offset)) + ' of ' + fmtNum(data.total) + ' species';
                 if (!data.has_more) {
                     document.getElementById('species-load-more-wrap').hidden = true;
                 }
