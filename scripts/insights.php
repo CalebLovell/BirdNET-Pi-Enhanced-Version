@@ -1192,7 +1192,7 @@ $db->close();
         <div class="insights-stats-list">
             <?php if(empty($activity_windows)): ?>
             <div class="insights-stats-item">
-                <span class="insights-stats-name">Not enough data yet</span>
+                <span class="insights-stats-name">Not enough detections yet &mdash; this fills in as your station listens</span>
                 <span class="insights-stats-count">—</span>
             </div>
             <?php else: ?>
@@ -1342,7 +1342,7 @@ $db->close();
         <div class="insights-stats-list" id="seasonal-presence-list">
             <?php if(empty($seasonal_top)): ?>
             <div class="insights-stats-item">
-                <span class="insights-stats-name">Not enough data yet</span>
+                <span class="insights-stats-name">Not enough detections yet &mdash; this fills in as your station listens</span>
                 <span class="insights-stats-count">—</span>
             </div>
             <?php else: ?>
@@ -1367,9 +1367,9 @@ $db->close();
     <?php if (!$has_weather): ?>
         <div style="text-align: center; padding: 100px 20px; color: var(--text-muted);">
             <div style="font-size: 4em; margin-bottom: 20px;">🌤️</div>
-            <h2>Weather Data Not Available</h2>
-            <p>Your station does not have any weather data recorded in the database yet.</p>
-            <p style="font-size: 0.9em;">Weather correlations require the <strong>Weather Plugin</strong> to be active and populated.</p>
+            <h2>No weather data yet</h2>
+            <p>Weather syncs automatically every hour once your station's latitude and longitude are set in <a href="?view=Settings">Settings</a>.</p>
+            <p style="font-size: 0.9em;">First data usually appears within the hour &mdash; <a href="?view=Doctor">Station Doctor</a> shows the sync status. Correlations get more interesting after a few days of history.</p>
         </div>
     <?php else: ?>
     <!-- ====== PHASE 4: Weather Correlations ====== -->
@@ -1404,7 +1404,7 @@ $db->close();
                             <?php echo $t['det_count'] > 0 ? $t['species_count'] . ' species active' : 'No species recorded'; ?>
                         </div>
                     </div>
-                    <span class="insights-stats-count"><?php echo $t['det_count'] > 0 ? format_number($t['det_count']) : 'N/A'; ?></span>
+                    <span class="insights-stats-count"><?php echo $t['det_count'] > 0 ? format_number($t['det_count']) : '0'; ?></span>
                 </div>
                 <?php endforeach; ?>
                 <?php endif; ?>
@@ -1429,7 +1429,7 @@ $db->close();
                             <?php echo $c['det_count'] > 0 ? $c['species_count'] . ' species active' : 'No species recorded'; ?>
                         </div>
                     </div>
-                    <span class="insights-stats-count"><?php echo $c['det_count'] > 0 ? format_number($c['det_count']) : 'N/A'; ?></span>
+                    <span class="insights-stats-count"><?php echo $c['det_count'] > 0 ? format_number($c['det_count']) : '0'; ?></span>
                 </div>
                 <?php endforeach; ?>
                 <?php endif; ?>
@@ -1472,7 +1472,7 @@ $db->close();
 
                     <!-- Total Detections (Right) -->
                     <div style="flex: 0 0 120px; text-align: right; padding-left: 25px; display: flex; align-items: center; justify-content: flex-end;">
-                        <span class="insights-stats-count" style="font-size: 1.5em;"><?php echo $w['det_count'] > 0 ? format_number($w['det_count']) : 'N/A'; ?></span>
+                        <span class="insights-stats-count" style="font-size: 1.5em;"><?php echo $w['det_count'] > 0 ? format_number($w['det_count']) : '0'; ?></span>
                     </div>
                 </div>
                 <?php endforeach; ?>
