@@ -417,7 +417,7 @@ if ($is_species_ajax) {
                 </div>
                 <div class="filter-group search-group">
                     <label>Search Species</label>
-                    <input type="text" name="search" class="styled-input" data-ui-persist="species-search" placeholder="Search by name..." value="<?php echo htmlspecialchars($search); ?>">
+                    <input type="text" name="search" id="species-search-input" class="styled-input" data-ui-persist="species-search" placeholder="Search by name..." value="<?php echo htmlspecialchars($search); ?>">
                 </div>
             </div>
             <div class="filter-footer">
@@ -454,6 +454,20 @@ if ($is_species_ajax) {
             filterForm.submit();
         }, 50);
     });
+
+    // Search applies as you type (the dropdowns already submit on change);
+    // the debounce waits for a typing pause so we don't reload mid-word.
+    // Enter and the Apply button keep working as before.
+    var searchInput = document.getElementById('species-search-input');
+    if (searchInput && filterForm) {
+        var searchTimer;
+        searchInput.addEventListener('input', function() {
+            clearTimeout(searchTimer);
+            searchTimer = setTimeout(function() {
+                filterForm.submit();
+            }, 700);
+        });
+    }
 
     var btn = document.getElementById('species-load-more');
     if (!btn) return;
