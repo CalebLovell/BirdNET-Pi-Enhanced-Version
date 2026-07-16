@@ -1110,6 +1110,30 @@ if (preg_match('#^/api/v1/system/health$#', $requestUri)) {
     api_error('sci_name is required');
   }
   $exclude = isset($_GET['exclude']) ? trim($_GET['exclude']) : '';
+  /* Exclude the whole visit under review, not just its best clip: every
+     detection in a visit shares one acoustic event (the same individual,
+     the same background, the same distant mimic), so its errors are
+     correlated - a mockingbird doing a ten-minute Nighthawk impression
+     must not be "verified" against its own visit-mates. Clips from other
+     visits are independent samples of the model's judgment. Living in the
+     SQL WHERE (not a post-filter) so the LIMITed candidate scans reach
+     past even a marathon 100-detection visit instead of starving. */
+  $x_date = isset($_GET['exclude_date']) ? trim($_GET['exclude_date']) : '';
+  $x_from = isset($_GET['exclude_from']) ? trim($_GET['exclude_from']) : '';
+  $x_to = isset($_GET['exclude_to']) ? trim($_GET['exclude_to']) : '';
+  $visit_excl = ($x_date !== '' && $x_from !== '' && $x_to !== '');
+  $visit_excl_for = function ($prefix) use ($visit_excl) {
+    return $visit_excl
+      ? " AND NOT ({$prefix}Date = :xdate AND {$prefix}Time >= :xfrom AND {$prefix}Time <= :xto)"
+      : '';
+  };
+  $bind_visit = function ($stmt) use ($visit_excl, $x_date, $x_from, $x_to) {
+    if ($visit_excl) {
+      $stmt->bindValue(':xdate', $x_date, SQLITE3_TEXT);
+      $stmt->bindValue(':xfrom', $x_from, SQLITE3_TEXT);
+      $stmt->bindValue(':xto', $x_to, SQLITE3_TEXT);
+    }
+  };
   $examples = [];
   $seen = [];
 
@@ -1129,11 +1153,12 @@ if (preg_match('#^/api/v1/system/health$#', $requestUri)) {
   if (spine_table_exists($db, 'detection_reviews')) {
     $ex_stmt = $db->prepare("SELECT r.file_name, r.date, r.com_name, d.Confidence
       FROM detection_reviews r JOIN detections d ON d.File_Name = r.file_name
-      WHERE r.sci_name = :sci AND r.status = 'confirmed' AND r.file_name != :exclude
+      WHERE r.sci_name = :sci AND r.status = 'confirmed' AND r.file_name != :exclude" . $visit_excl_for('d.') . "
       ORDER BY d.Confidence DESC LIMIT 24");
     if ($ex_stmt) {
       $ex_stmt->bindValue(':sci', $sci, SQLITE3_TEXT);
       $ex_stmt->bindValue(':exclude', $exclude, SQLITE3_TEXT);
+      $bind_visit($ex_stmt);
       $ex_res = db_execute_safe($db, $ex_stmt, 'review examples confirmed');
       while ((count($confirmed_strong) + count($confirmed_weak)) < 6 && ($row = db_fetch_assoc_safe($ex_res))) {
         $rel = detection_clip_relative_path($row['date'], $row['com_name'], $row['file_name']);
@@ -1166,11 +1191,12 @@ if (preg_match('#^/api/v1/system/health$#', $requestUri)) {
   // candidates survive; rank the survivors by confidence.
   if (count($examples) < 3) {
     $fb_stmt = $db->prepare('SELECT File_Name, Date, Com_Name, Confidence FROM detections
-      WHERE Sci_Name = :sci AND File_Name != :exclude AND Confidence >= 0.9
+      WHERE Sci_Name = :sci AND File_Name != :exclude AND Confidence >= 0.9' . $visit_excl_for('') . '
       ORDER BY Date DESC, Time DESC LIMIT 60');
     if ($fb_stmt) {
       $fb_stmt->bindValue(':sci', $sci, SQLITE3_TEXT);
       $fb_stmt->bindValue(':exclude', $exclude, SQLITE3_TEXT);
+      $bind_visit($fb_stmt);
       $fb_res = db_execute_safe($db, $fb_stmt, 'review examples fallback');
       $candidates = [];
       while ($row = db_fetch_assoc_safe($fb_res)) {
@@ -1213,11 +1239,12 @@ if (preg_match('#^/api/v1/system/health$#', $requestUri)) {
      so the strip is never needlessly empty. */
   if (count($examples) === 0 && $clip_check) {
     $rc_stmt = $db->prepare('SELECT File_Name, Date, Com_Name, Confidence FROM detections
-      WHERE Sci_Name = :sci AND File_Name != :exclude
+      WHERE Sci_Name = :sci AND File_Name != :exclude' . $visit_excl_for('') . '
       ORDER BY Date DESC, Time DESC LIMIT 40');
     if ($rc_stmt) {
       $rc_stmt->bindValue(':sci', $sci, SQLITE3_TEXT);
       $rc_stmt->bindValue(':exclude', $exclude, SQLITE3_TEXT);
+      $bind_visit($rc_stmt);
       $rc_res = db_execute_safe($db, $rc_stmt, 'review examples recent');
       $recent = [];
       while ($row = db_fetch_assoc_safe($rc_res)) {

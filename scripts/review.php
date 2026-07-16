@@ -182,15 +182,22 @@ require_once 'scripts/common.php';
         });
       });
     };
-    if (exampleCache[v.sci_name]) {
-      renderExamples(exampleCache[v.sci_name]);
+    // Keyed per visit, not per species: the exclusion window differs for
+    // each queued visit of the same species, so their strips differ too.
+    var cacheKey = v.sci_name + '|' + v.date + '|' + v.first_time + '|' + v.last_time;
+    if (exampleCache[cacheKey]) {
+      renderExamples(exampleCache[cacheKey]);
       return;
     }
-    fetch('api/v1/reviews/examples?sci_name=' + encodeURIComponent(v.sci_name) + '&exclude=' + encodeURIComponent(v.best_file), { headers: { 'Accept': 'application/json' } })
+    fetch('api/v1/reviews/examples?sci_name=' + encodeURIComponent(v.sci_name) +
+        '&exclude=' + encodeURIComponent(v.best_file) +
+        '&exclude_date=' + encodeURIComponent(v.date) +
+        '&exclude_from=' + encodeURIComponent(v.first_time) +
+        '&exclude_to=' + encodeURIComponent(v.last_time), { headers: { 'Accept': 'application/json' } })
       .then(function (r) { return r.ok ? r.json() : { examples: [] }; })
       .then(function (j) {
-        exampleCache[v.sci_name] = j.examples || [];
-        renderExamples(exampleCache[v.sci_name]);
+        exampleCache[cacheKey] = j.examples || [];
+        renderExamples(exampleCache[cacheKey]);
       })
       .catch(function () {});
   }
