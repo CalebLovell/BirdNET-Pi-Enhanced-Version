@@ -162,8 +162,8 @@ html:not([data-theme="dark"]) .theme-when-dark {
 
 .sidebar.collapsed .palette-launch {
   justify-content: center;
-  margin: 8px 10px 0;
-  padding: 7px 0;
+  margin: 6px 10px 0;
+  padding: 6px 0;
 }
 
 /* Sits beside the hamburger (margin-left:auto absorbs the header's

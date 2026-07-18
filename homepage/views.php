@@ -51,6 +51,12 @@ if (isset($_SESSION['behind']) && intval($_SESSION['behind']) >= 50 && (($config
   $updatediv = ' <div class="updatenumber">'.$_SESSION["behind"].'</div>';
 }
 
+/* Collapsed sidebar rail is a per-browser display preference, not app
+   state, so it's read from a cookie (set client-side on toggle) and
+   rendered server-side to avoid a flash of the expanded sidebar on
+   every full-page navigation. */
+$sidebar_collapsed = isset($_COOKIE['birdnet_sidebar_collapsed']) && $_COOKIE['birdnet_sidebar_collapsed'] === '1';
+
 function nav_icon($name) {
   return '<svg class="nav-icon" aria-hidden="true" focusable="false"><use href="static/icons.svg#' . $name . '"></use></svg>';
 }
@@ -150,7 +156,7 @@ function nav_icon($name) {
   <button type="button" class="icon palette-launch-mobile" onclick="window.BirdNETPalette && BirdNETPalette.show()" aria-label="Search pages and species"><?php echo nav_icon('search'); ?></button>
   <button type="button" class="icon" onclick="myFunction()" aria-label="Toggle navigation menu"><img src="images/menu.png" alt=""></button>
 </div>
-<div class="sidebar" id="mySidebar">
+<div class="sidebar<?php echo $sidebar_collapsed ? ' collapsed' : ''; ?>" id="mySidebar">
   <div class="sidebar-header">
     <div class="sidebar-logo">
       <img src="images/bnp.png" alt="BirdNET-Pi logo">
@@ -166,9 +172,9 @@ function nav_icon($name) {
       }
       ?>
     </div>
-    <button type="button" class="sidebar-toggle" onclick="myFunction()" aria-label="Toggle sidebar">«</button>
+    <button type="button" class="sidebar-toggle" onclick="myFunction()" aria-label="Toggle sidebar" data-tooltip="Toggle sidebar">«</button>
   </div>
-  <button type="button" class="palette-launch" onclick="window.BirdNETPalette && BirdNETPalette.show()" aria-label="Search pages and species">
+  <button type="button" class="palette-launch" onclick="window.BirdNETPalette && BirdNETPalette.show()" aria-label="Search pages and species" data-tooltip="Search pages and species">
     <?php echo nav_icon('search'); ?> <span>Search&hellip;</span> <kbd>Ctrl K</kbd>
   </button>
   <nav class="sidebar-nav" aria-label="Main navigation">
@@ -208,7 +214,7 @@ foreach ($main_nav as $nav_item) {
     $insights_open = ($current_view === 'Insights' || $current_view === 'Analytics' || $current_view === 'Year');
     $effective_subview = $current_subview === '' ? 'dashboard' : $current_subview;
     echo '<div class="sidebar-dropdown' . ($insights_open ? ' open' : '') . '">';
-    echo '<button type="button" class="sidebar-dropdown-toggle" aria-expanded="' . ($insights_open ? 'true' : 'false') . '">' . nav_icon('zap') . ' <span>Insights</span> <span class="dropdown-arrow" aria-hidden="true">&#9660;</span></button>';
+    echo '<button type="button" class="sidebar-dropdown-toggle" aria-expanded="' . ($insights_open ? 'true' : 'false') . '" data-tooltip="Insights">' . nav_icon('zap') . ' <span>Insights</span> <span class="dropdown-arrow" aria-hidden="true">&#9660;</span></button>';
     echo '<div class="sidebar-dropdown-content">';
     foreach ($insights_items as $sv) {
       if ($sv[1] === null) {
@@ -218,7 +224,7 @@ foreach ($main_nav as $nav_item) {
         $sv_active = ($current_view === 'Insights' && $effective_subview === $sv[1]);
         $href = '?view=Insights&amp;subview=' . $sv[1];
       }
-      echo '<a href="' . $href . '"' . ($sv_active ? ' class="active" aria-current="page"' : '') . '>' . nav_icon($sv[2]) . ' <span>' . h($sv[3]) . '</span></a>';
+      echo '<a href="' . $href . '" data-tooltip="' . h($sv[3]) . '"' . ($sv_active ? ' class="active" aria-current="page"' : '') . '>' . nav_icon($sv[2]) . ' <span>' . h($sv[3]) . '</span></a>';
     }
     echo '</div></div>';
     continue;
@@ -226,10 +232,10 @@ foreach ($main_nav as $nav_item) {
   $is_active = ($current_view === $nav_item[0])
     || (isset($nav_aliases[$nav_item[0]]) && in_array($current_view, $nav_aliases[$nav_item[0]], true));
   $extra = ($nav_item[0] === 'Tools') ? $updatediv : '';
-  echo '<a href="?view=' . rawurlencode($nav_item[0]) . '"' . ($is_active ? ' class="active" aria-current="page"' : '') . '>' . nav_icon($nav_item[1]) . ' <span>' . h($nav_item[2]) . '</span>' . $extra . '</a>';
+  echo '<a href="?view=' . rawurlencode($nav_item[0]) . '" data-tooltip="' . h($nav_item[2]) . '"' . ($is_active ? ' class="active" aria-current="page"' : '') . '>' . nav_icon($nav_item[1]) . ' <span>' . h($nav_item[2]) . '</span>' . $extra . '</a>';
 }
 ?>
-    <button type="button" id="themeToggleBtn" onclick="toggleTheme()">
+    <button type="button" id="themeToggleBtn" onclick="toggleTheme()" data-tooltip="Toggle dark / light mode">
       <span class="theme-toggle-option theme-when-light">🌙 <span>Dark Mode</span></span>
       <span class="theme-toggle-option theme-when-dark">☀️ <span>Light Mode</span></span>
     </button>
@@ -414,7 +420,7 @@ function copyOutput(elem) {
 }
 </script>
 
-<div class="views">
+<div class="views<?php echo $sidebar_collapsed ? ' expanded' : ''; ?>">
 <?php
 function update_species_list($filename, $species, $add) {
     if($add){
@@ -700,21 +706,37 @@ if(isset($_GET['view'])){
 } else {include('scripts/now.php');}
 ?>
 <script>
+function syncSidebarTooltips() {
+  var sidebar = document.getElementById("mySidebar");
+  var collapsed = sidebar.classList.contains("collapsed");
+  sidebar.querySelectorAll("[data-tooltip]").forEach(function(el) {
+    if (collapsed) {
+      el.setAttribute("title", el.getAttribute("data-tooltip"));
+    } else {
+      el.removeAttribute("title");
+    }
+  });
+}
 function myFunction() {
   var sidebar = document.getElementById("mySidebar");
   var content = document.querySelector(".views");
-  
+
   if (window.innerWidth <= 1000) {
     // Mobile: Toggle drawer
     sidebar.classList.toggle("responsive");
   } else {
     // Desktop: Toggle collapse
-    sidebar.classList.toggle("collapsed");
+    var isCollapsed = sidebar.classList.toggle("collapsed");
     if (content) {
       content.classList.toggle("expanded");
     }
+    syncSidebarTooltips();
+    // Persist so the next full-page navigation renders collapsed
+    // server-side instead of flashing expanded before this script runs.
+    document.cookie = "birdnet_sidebar_collapsed=" + (isCollapsed ? "1" : "0") + "; path=/; max-age=31536000; samesite=lax";
   }
 }
+document.addEventListener("DOMContentLoaded", syncSidebarTooltips);
 function setLiveStreamVolume(vol) {
   var parentAudioElements = document.getElementsByTagName("audio");
   if (parentAudioElements.length > 0) {

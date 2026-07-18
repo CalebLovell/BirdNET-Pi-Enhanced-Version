@@ -2059,7 +2059,7 @@ pre#timer.bash {
 
 /* Collapsed Sidebar State */
 .sidebar.collapsed {
-  width: 70px;
+  width: 76px;
 }
 
 .sidebar.collapsed .sidebar-title {
@@ -2067,17 +2067,17 @@ pre#timer.bash {
 }
 
 .sidebar.collapsed .sidebar-header {
-  padding: 16px 10px;
+  padding: 14px 10px;
   justify-content: center;
 }
 
-.sidebar.collapsed .sidebar-logo img {
-  max-width: 45px;
+.sidebar.collapsed .sidebar-logo {
+  display: none;
 }
 
 .sidebar.collapsed .sidebar-nav button,
 .sidebar.collapsed .sidebar-nav a {
-  padding: 12px 0;
+  padding: 10px 0;
   justify-content: center;
   border-left-width: 0;
   border-bottom: 3px solid transparent;
@@ -2105,8 +2105,28 @@ pre#timer.bash {
   transform: rotate(180deg);
 }
 
+.sidebar.collapsed .sidebar-nav {
+  padding: 10px 0;
+  scrollbar-width: none;
+}
+
+.sidebar.collapsed .sidebar-nav::-webkit-scrollbar {
+  display: none;
+}
+
 .sidebar.collapsed .sidebar-feed {
   display: none;
+}
+
+.sidebar.collapsed .sidebar-dropdown-content {
+  padding-left: 0;
+}
+
+.sidebar.collapsed .sidebar-dropdown-content button,
+.sidebar.collapsed .sidebar-dropdown-content a {
+  padding: 10px 0 !important;
+  justify-content: center !important;
+  border-left-width: 0 !important;
 }
 
 .sidebar-header {
@@ -2267,8 +2287,8 @@ pre#timer.bash {
 }
 
 .views.expanded {
-  margin-left: 70px;
-  width: calc(100% - 70px);
+  margin-left: 76px;
+  width: calc(100% - 76px);
 }
 
 ul.navbar-nav {
